@@ -1,0 +1,19 @@
+# HTML 파싱 및 RAG 구축을 위한 최소 패키지
+
+# Data & Parsing
+pandas
+beautifulsoup4
+lxml
+openpyxl
+
+# AI & RAG
+langchain
+langchain-openai
+chromadb
+sentence-transformers
+tiktoken
+
+# UI & Dev
+streamlit
+python-dotenv
+pytest

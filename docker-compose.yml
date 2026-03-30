@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  fintech-app:
+    build: .
+    container_name: samsung-audit-rag
+    volumes:
+      - .:/app  # [핵심] 로컬 폴더와 컨테이너 /app 폴더 동기화
+    ports:
+      - "8501:8501" # UI 접속용 (localhost:8501)
+    env_file:
+      - .env    # API Key 등 민감 정보 로드
+    environment:
+      - PYTHONUNBUFFERED=1
+    stdin_open: true # 디버깅을 위해 터미널 입력 허용
+    tty: true
