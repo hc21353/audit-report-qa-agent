@@ -17,7 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Streamlit 기본 포트 개방
-EXPOSE 8501
+# EXPOSE 8501
 
-# 실행 명령어 (나중에 docker-compose에서 덮어쓰기 가능)
-CMD ["streamlit", "run", "src/ui/app.py"]
+# 실행 명령어 설정 (Streamlit 앱 실행)
+# CMD ["streamlit", "run", "app.py", "—server.port=8501",
+# 특정 파일을 실행하지 않고, 그냥 터미널(bash)만 열어둠: (나중에 docker-compose에서 덮어쓰기 가능)
+CMD ["bash"]
