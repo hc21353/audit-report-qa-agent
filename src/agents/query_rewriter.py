@@ -27,7 +27,7 @@ ACCOUNTING_DICT = {
 }
 
 
-def query_rewriter_node(state: dict, llm) -> dict:
+def query_rewriter_node(state: dict, llm, system_prompt: str = "") -> dict:
     """
     LangGraph 노드: 검색에 최적화된 쿼리 생성.
 
@@ -75,7 +75,7 @@ def query_rewriter_node(state: dict, llm) -> dict:
     # LLM 기반 추가 쿼리 (복잡한 질문일 때)
     if intent in ("comparison", "trend", "calculation") and llm:
         try:
-            llm_queries = _llm_rewrite(user_query, intent, years, llm, state)
+            llm_queries = _llm_rewrite(user_query, intent, years, llm, system_prompt)
             all_queries.extend(llm_queries)
         except Exception as e:
             state.setdefault("errors", []).append(f"QueryRewriter LLM error: {e}")
@@ -122,7 +122,7 @@ def _convert_accounting_terms(query: str) -> str:
     return result
 
 
-def _llm_rewrite(query: str, intent: str, years: list, llm, state: dict) -> list[dict]:
+def _llm_rewrite(query: str, intent: str, years: list, llm, system_prompt: str = "") -> list[dict]:
     """LLM 기반 쿼리 재작성"""
     prompt = f"""다음 질문을 감사보고서 검색에 최적화된 쿼리 3개로 변환하세요.
 JSON 배열만 반환하세요.
@@ -134,7 +134,7 @@ JSON 배열만 반환하세요.
 형식: [{{"query": "...", "years": [...], "sections": [...], "strategy": "llm_rewrite"}}]"""
 
     response = llm.invoke([
-        SystemMessage(content=state.get("_system_prompt", "")),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=prompt),
     ])
 

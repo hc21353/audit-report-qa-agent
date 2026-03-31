@@ -15,7 +15,7 @@ llm.py - 에이전트별 백엔드를 지원하는 LLM 클라이언트 팩토리
 from __future__ import annotations
 from typing import Optional
 
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 from langchain_core.language_models import BaseChatModel
 
 
@@ -54,6 +54,15 @@ def resolve_backend(agent_name: str, config: "Config") -> tuple[str, str, dict]:
     timeout = runtime_cfg.get("llm", {}).get("timeout", 120)
     kwargs["timeout"] = timeout
 
+    # 에이전트별 num_predict (JSON 생성은 짧게, 답변은 길게)
+    _num_predict_map = {
+        "orchestrator": 256,
+        "query_rewriter": 512,
+        "retriever": 512,
+        "analyst": 1024,
+    }
+    kwargs["num_predict"] = agent_cfg.get("num_predict", _num_predict_map.get(agent_name, 512))
+
     return backend, model, kwargs
 
 
@@ -74,7 +83,9 @@ def create_llm(agent_name: str, config: "Config") -> BaseChatModel:
         base_url=backend,
         model=model,
         temperature=kwargs.get("temperature", 0.1),
-        timeout=kwargs.get("timeout", 120),
+        num_ctx=8192,          # 컨텍스트 창 확장 (기본 4096 → 8192)
+        num_predict=kwargs.get("num_predict", 512),  # 최대 생성 토큰 제한
+        reasoning=False,       # qwen3 thinking 모드 비활성화
     )
 
     print(f"[LLM] {agent_name}: model={model}, backend={backend}")

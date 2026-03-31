@@ -22,6 +22,7 @@ from src.agents.orchestrator import orchestrator_node, orchestrator_router
 from src.agents.query_rewriter import query_rewriter_node
 from src.agents.retriever import retriever_node
 from src.agents.analyst import analyst_node, analyst_router
+from src.agents.db_context import build_db_context
 from src.agents.state import initial_state
 
 
@@ -56,9 +57,6 @@ class GraphState(TypedDict):
     iteration: int
     max_iterations: int
     errors: list[str]
-
-    # 내부 (시스템 프롬프트)
-    _system_prompt: str
 
 
 # ─── 그래프 빌드 ─────────────────────────────────────────────
@@ -99,6 +97,11 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     parsed_md_dir = config.runtime.get("data", {}).get("parsed_md_dir", "./data/parsed_md")
     init_csv_reader(parsed_md_dir)
 
+    # DB 섹션 구조 컨텍스트 (초기화 시 한 번만 조회, 이후 클로저로 재사용)
+    db_context_str = build_db_context(db)
+    if db_context_str:
+        print(f"[Graph] DB context built ({len(db_context_str)} chars)")
+
     retriever_tools = {
         "hybrid_search": hs_tool,
         "structured_query": sq_tool,
@@ -119,19 +122,16 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     # ─── 노드 함수 래핑 (클로저로 LLM/tools 주입) ────────────
 
     def _orchestrator(state: GraphState) -> dict:
-        state["_system_prompt"] = orch_prompt
-        return orchestrator_node(state, orchestrator_llm)
+        return orchestrator_node(state, orchestrator_llm, system_prompt=orch_prompt)
 
     def _query_rewriter(state: GraphState) -> dict:
-        state["_system_prompt"] = rewriter_prompt
-        return query_rewriter_node(state, rewriter_llm)
+        return query_rewriter_node(state, rewriter_llm, system_prompt=rewriter_prompt)
 
     def _retriever(state: GraphState) -> dict:
-        return retriever_node(state, retriever_tools, llm=retriever_llm)
+        return retriever_node(state, retriever_tools, llm=retriever_llm, db_context=db_context_str)
 
     def _analyst(state: GraphState) -> dict:
-        state["_system_prompt"] = analyst_prompt
-        return analyst_node(state, analyst_llm, analyst_tools)
+        return analyst_node(state, analyst_llm, analyst_tools, system_prompt=analyst_prompt)
 
     # ─── 그래프 조립 ─────────────────────────────────────────
 

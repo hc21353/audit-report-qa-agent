@@ -9,10 +9,11 @@ orchestrator.py - 사용자 질문을 분석하고 라우팅하는 에이전트 
 
 import json
 import re
+import time
 from langchain_core.messages import SystemMessage, HumanMessage
 
 
-def orchestrator_node(state: dict, llm) -> dict:
+def orchestrator_node(state: dict, llm, system_prompt: str = "") -> dict:
     """
     LangGraph 노드: 사용자 질문을 분석.
 
@@ -24,6 +25,8 @@ def orchestrator_node(state: dict, llm) -> dict:
         업데이트된 state 필드들
     """
     user_query = state["user_query"]
+    print(f"[Orchestrator] Start: {user_query[:50]}", flush=True)
+    t0 = time.time()
 
     # 1. 규칙 기반 사전 분석 (LLM 호출 전 빠른 판별)
     pre_analysis = _rule_based_analysis(user_query)
@@ -45,7 +48,7 @@ def orchestrator_node(state: dict, llm) -> dict:
 
     try:
         response = llm.invoke([
-            SystemMessage(content=state.get("_system_prompt", "")),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=prompt),
         ])
 
@@ -54,12 +57,14 @@ def orchestrator_node(state: dict, llm) -> dict:
         parsed = pre_analysis
         state.setdefault("errors", []).append(f"Orchestrator LLM error: {e}")
 
-    return {
+    result = {
         "intent": parsed.get("intent", pre_analysis.get("intent", "general")),
         "extracted_years": parsed.get("years", pre_analysis.get("years", [])),
         "extracted_sections": parsed.get("sections", []),
         "sub_questions": parsed.get("sub_questions", []),
     }
+    print(f"[Orchestrator] Done in {time.time()-t0:.1f}s, intent={result['intent']}", flush=True)
+    return result
 
 
 def orchestrator_router(state: dict) -> str:

@@ -24,6 +24,7 @@ workflow:
         - general: 일반적 질문
       질문에서 연도, 섹션, 키워드를 추출하세요.
       복합 질문은 서브 질문으로 분해하세요.
+      /no_think
 
   query_rewriter:
     description: 사용자 질문을 검색에 최적화된 쿼리로 변환
@@ -40,6 +41,7 @@ workflow:
         2. 키워드 추출 (핵심 단어만)
         3. 회계 용어 변환 ("빚"→"부채", "돈"→"현금및현금성자산" 등)
       JSON 형식으로 반환: {"queries": [...], "years": [...], "sections": [...]}
+      /no_think
 
   retriever:
     description: LLM 기반 자율 검색. 질문을 분석하여 최적의 tool 조합과 파라미터를 결정.
@@ -55,6 +57,7 @@ workflow:
       당신은 감사보고서 검색 계획 수립 전문가입니다.
       사용자 질문과 의도를 분석하여 최적의 검색 도구와 파라미터를 선택하세요.
       JSON만 반환하세요.
+      /no_think
 
   analyst:
     description: 검색 결과 기반 분석 및 답변 생성
@@ -71,6 +74,7 @@ workflow:
       - [TABLE_CSV] 태그가 있으면 csv_reader tool로 표 데이터를 불러오세요.
       - 계산이 필요하면 calculator tool을 사용하세요.
       - 정보가 부족하면 "추가 검색 필요"를 반환하세요.
+      /no_think
 
 # ─── LangGraph 상태 그래프 ──────────────────────────────────
 
