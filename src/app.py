@@ -5,6 +5,11 @@ app.py - Streamlit 채팅 인터페이스
   streamlit run src/app.py
 """
 
+import sys
+import os
+# 프로젝트 루트(src의 부모)를 sys.path에 추가 — 어느 디렉토리에서 실행해도 동작
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import streamlit as st
 import json
 from pathlib import Path
