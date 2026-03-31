@@ -1,0 +1,55 @@
+# ============================================================
+# runs.yaml - 실험 조합 (임베딩 × 청킹 × LLM)
+# ============================================================
+
+output_dir: ./experiments
+
+runs:
+  - name: baseline_section
+    description: "메인 전략: 구조 기반 청킹 + multilingual-e5-large"
+    embedding: multilingual-e5-large
+    chunking: section_based
+    llm: qwen2.5:14b
+    vector_store: faiss
+
+  - name: baseline_fixed
+    description: "비교군: 고정 크기 청킹"
+    embedding: multilingual-e5-large
+    chunking: fixed_size
+    llm: qwen2.5:14b
+    vector_store: faiss
+
+  - name: baseline_recursive
+    description: "비교군: 재귀 분할 청킹"
+    embedding: multilingual-e5-large
+    chunking: recursive
+    llm: qwen2.5:14b
+    vector_store: faiss
+
+  - name: ko_sroberta_section
+    description: "한국어 특화 임베딩 비교"
+    embedding: ko-sroberta
+    chunking: section_based
+    llm: qwen2.5:14b
+    vector_store: faiss
+
+  - name: bge_m3_section
+    description: "긴 문맥 임베딩 비교 (max 8192 tokens)"
+    embedding: bge-m3
+    chunking: section_based
+    llm: qwen2.5:14b
+    vector_store: chroma
+
+  - name: nomic_section
+    description: "Ollama 네이티브 임베딩 비교"
+    embedding: ollama-nomic
+    chunking: section_based
+    llm: qwen2.5:14b
+    vector_store: faiss
+
+  - name: small_llm_section
+    description: "경량 LLM 비교"
+    embedding: multilingual-e5-large
+    chunking: section_based
+    llm: qwen2.5:7b
+    vector_store: faiss

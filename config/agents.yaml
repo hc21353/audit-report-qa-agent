@@ -1,0 +1,96 @@
+# ============================================================
+# agents.yaml - LangGraph 멀티 에이전트 워크플로우
+#
+# 각 에이전트는 독립된 backend(Ollama 서버)를 가질 수 있음.
+# backend를 생략하면 runtime.yaml의 기본값 사용.
+# ============================================================
+
+framework: langgraph
+
+workflow:
+  orchestrator:
+    description: 사용자 질문을 분석하고 서브태스크로 분배
+    model: qwen2.5:14b
+    backend: null            # null이면 runtime.yaml 기본값
+    temperature: 0.1
+    tools: []
+    system_prompt: |
+      당신은 삼성전자 감사보고서 QA 시스템의 오케스트레이터입니다.
+      사용자 질문을 분석하여 다음 중 하나로 분류하세요:
+        - simple_lookup: 단순 조회 (특정 연도, 특정 섹션의 정보)
+        - comparison: 연도 비교 (2개 이상 연도 비교)
+        - trend: 트렌드 분석 (기간 추이)
+        - calculation: 재무비율 등 계산 필요
+        - general: 일반적 질문
+      질문에서 연도, 섹션, 키워드를 추출하세요.
+      복합 질문은 서브 질문으로 분해하세요.
+
+  query_rewriter:
+    description: 사용자 질문을 검색에 최적화된 쿼리로 변환
+    model: qwen2.5:7b
+    backend: null
+    temperature: 0.0
+    tools: []
+    max_rewrites: 3
+    system_prompt: |
+      당신은 검색 쿼리 최적화 전문가입니다.
+      사용자 질문을 벡터 검색과 구조 검색에 최적화된 형태로 변환하세요.
+      변환 전략:
+        1. 원문 유지 (그대로 검색)
+        2. 키워드 추출 (핵심 단어만)
+        3. 회계 용어 변환 ("빚"→"부채", "돈"→"현금및현금성자산" 등)
+      JSON 형식으로 반환: {"queries": [...], "years": [...], "sections": [...]}
+
+  retriever:
+    description: LLM 기반 자율 검색. 질문을 분석하여 최적의 tool 조합과 파라미터를 결정.
+    model: qwen2.5:7b             # 가벼운 모델로 검색 계획 수립
+    backend: null
+    temperature: 0.0
+    tools:
+      - hybrid_search
+      - structured_query
+      - list_available_sections
+      - csv_reader
+    system_prompt: |
+      당신은 감사보고서 검색 계획 수립 전문가입니다.
+      사용자 질문과 의도를 분석하여 최적의 검색 도구와 파라미터를 선택하세요.
+      JSON만 반환하세요.
+
+  analyst:
+    description: 검색 결과 기반 분석 및 답변 생성
+    model: qwen2.5:14b
+    backend: null
+    temperature: 0.1
+    tools:
+      - calculator
+      - chart_generator
+    system_prompt: |
+      당신은 삼성전자 감사보고서 분석 전문가입니다.
+      검색된 문서를 기반으로 정확하고 상세한 답변을 생성하세요.
+      - 숫자를 인용할 때는 출처(연도, 섹션)를 명시하세요.
+      - [TABLE_CSV] 태그가 있으면 csv_reader tool로 표 데이터를 불러오세요.
+      - 계산이 필요하면 calculator tool을 사용하세요.
+      - 정보가 부족하면 "추가 검색 필요"를 반환하세요.
+
+# ─── LangGraph 상태 그래프 ──────────────────────────────────
+
+graph:
+  entry_point: orchestrator
+  nodes:
+    - orchestrator
+    - query_rewriter
+    - retriever
+    - analyst
+  edges:
+    orchestrator:
+      simple_lookup: retriever
+      comparison: query_rewriter
+      trend: query_rewriter
+      calculation: query_rewriter
+      general: query_rewriter
+    query_rewriter: retriever
+    retriever: analyst
+    analyst:
+      need_more_search: retriever
+      done: END
+  max_iterations: 5

@@ -1,0 +1,72 @@
+# ============================================================
+# questions.yaml - 평가용 질문셋
+# ============================================================
+
+questions:
+  # 단순 조회
+  - id: q01
+    question: "2024년 삼성전자의 총자산은 얼마인가?"
+    type: simple_lookup
+    expected_year: 2024
+    expected_tool: sql_query
+    ground_truth: "324,966,127백만원"
+
+  - id: q02
+    question: "2024년 핵심감사사항은 무엇인가?"
+    type: section_lookup
+    expected_year: 2024
+    expected_section: "독립된 감사인의 감사보고서"
+    expected_tool: vector_search
+
+  - id: q03
+    question: "2024년 감사의견은?"
+    type: simple_lookup
+    expected_year: 2024
+    expected_tool: sql_query
+    ground_truth: "적정"
+
+  # 연도 비교
+  - id: q04
+    question: "2018년 대비 2022년 부채 구조가 어떻게 변했는가?"
+    type: year_comparison
+    expected_years: [2018, 2022]
+    expected_tool: sql_query
+
+  - id: q05
+    question: "2020년과 2024년의 유동자산 구성 차이를 설명해줘"
+    type: year_comparison
+    expected_years: [2020, 2024]
+    expected_tool: sql_query
+
+  # 트렌드 분석
+  - id: q06
+    question: "최근 5년간 유동자산 추이를 설명해줘"
+    type: trend_analysis
+    expected_years: [2020, 2021, 2022, 2023, 2024]
+    expected_tool: sql_query
+
+  - id: q07
+    question: "감사의견이 변경된 연도가 있는가?"
+    type: cross_year_search
+    expected_years: all
+    expected_tool: sql_query
+
+  # 계산
+  - id: q08
+    question: "2024년 유동비율과 부채비율을 계산해줘"
+    type: calculation
+    expected_year: 2024
+    expected_tool: calculator
+
+  - id: q09
+    question: "최근 3년 ROA 추이를 보여줘"
+    type: calculation_trend
+    expected_years: [2022, 2023, 2024]
+    expected_tool: [calculator, chart_generator]
+
+  # 시각화
+  - id: q10
+    question: "최근 3년 부채비율 추이를 차트로 보여줘"
+    type: visualization
+    expected_years: [2022, 2023, 2024]
+    expected_tool: chart_generator

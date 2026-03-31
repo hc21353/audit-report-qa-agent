@@ -1,0 +1,70 @@
+# ============================================================
+# tools.yaml - 에이전트 Tool 정의 (고도화)
+# ============================================================
+
+retrieval:
+  hybrid_search:
+    description: "벡터 유사도 + BM25 키워드를 RRF로 결합한 하이브리드 검색"
+    type: internal
+    params:
+      query:       { type: string,  required: true }
+      top_k:       { type: integer, default: 10 }
+      year:        { type: integer, default: 0, description: "연도 필터 (0=전체)" }
+      section_h2:  { type: string,  default: "", description: "h2 섹션 필터" }
+      mode:        { type: enum, values: [hybrid, vector, bm25], default: hybrid }
+    returns: "RRF 스코어 기준 정렬된 청크 리스트 (vector_rank, bm25_rank, rrf_score 포함)"
+
+  structured_query:
+    description: "DB의 h1~h6 구조를 활용한 정밀 검색. 연도·섹션·키워드 조합으로 정확한 문서 위치를 찾을 때 사용."
+    type: internal
+    params:
+      years:         { type: string, default: "", description: "쉼표 구분 연도 (예: 2022,2023,2024)" }
+      section_h2:    { type: string, default: "", description: "대분류: 재무제표|주석|독립된 감사인의 감사보고서 등" }
+      section_h3:    { type: string, default: "", description: "주석 번호 (예: 30. 특수관계자 거래)" }
+      section_h4:    { type: string, default: "", description: "세부 항목" }
+      section_h5:    { type: string, default: "", description: "세세부 항목" }
+      keyword:       { type: string, default: "", description: "본문 키워드" }
+      content_type:  { type: enum, values: [text, table, table_csv, mixed, all], default: all }
+      limit:         { type: integer, default: 30 }
+    returns: "매칭된 청크 리스트 (h2~h5 메타데이터 + csv_refs 포함)"
+
+  list_available_sections:
+    description: "DB에 저장된 섹션 목록 조회. 어떤 섹션이 존재하는지 파악할 때 사용."
+    type: internal
+    params:
+      year:  { type: integer, default: 0 }
+      level: { type: integer, default: 3, description: "헤딩 레벨 (2=대분류, 3=주석번호)" }
+    returns: "섹션 목록 [{section, year, chunk_count}]"
+
+  csv_reader:
+    description: "[TABLE_CSV] 태그의 CSV 파일을 읽어 반환. 청크에 [TABLE_CSV] 태그가 있을 때 호출."
+    type: internal
+    params:
+      csv_path:      { type: string, required: true }
+      output_format: { type: enum, values: [markdown, dict], default: markdown }
+    returns: "마크다운 테이블 또는 dict 리스트"
+
+analysis:
+  calculator:
+    description: 재무비율 및 수치 계산
+    type: internal
+    params:
+      expression: { type: string, required: true, description: "계산식 (예: 82320322 / 80157976 * 100)" }
+      label:      { type: string, required: false, description: "결과 레이블 (예: 유동비율)" }
+    presets:
+      유동비율:       "유동자산 / 유동부채 * 100"
+      부채비율:       "부채총계 / 자본총계 * 100"
+      자기자본비율:   "자본총계 / 자산총계 * 100"
+      영업이익률:     "영업이익 / 매출액 * 100"
+      ROE:           "당기순이익 / 자본총계 * 100"
+      ROA:           "당기순이익 / 자산총계 * 100"
+    returns: "계산 결과 + 수식"
+
+  chart_generator:
+    description: 재무 데이터 시각화 차트 생성
+    type: internal
+    params:
+      chart_type: { type: enum, values: [bar, line, stacked_bar, pie], required: true }
+      data:       { type: object, required: true }
+      title:      { type: string, required: false }
+    returns: "Plotly JSON"
