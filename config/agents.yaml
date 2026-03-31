@@ -10,7 +10,7 @@ framework: langgraph
 workflow:
   orchestrator:
     description: 사용자 질문을 분석하고 서브태스크로 분배
-    model: qwen2.5:14b
+    model: qwen3.5:0.8b
     backend: null            # null이면 runtime.yaml 기본값
     temperature: 0.1
     tools: []
@@ -27,7 +27,7 @@ workflow:
 
   query_rewriter:
     description: 사용자 질문을 검색에 최적화된 쿼리로 변환
-    model: qwen2.5:7b
+    model: qwen3.5:0.8b
     backend: null
     temperature: 0.0
     tools: []
@@ -43,7 +43,7 @@ workflow:
 
   retriever:
     description: LLM 기반 자율 검색. 질문을 분석하여 최적의 tool 조합과 파라미터를 결정.
-    model: qwen2.5:7b             # 가벼운 모델로 검색 계획 수립
+    model: qwen3.5:0.8b            # 가벼운 모델로 검색 계획 수립
     backend: null
     temperature: 0.0
     tools:
@@ -58,7 +58,7 @@ workflow:
 
   analyst:
     description: 검색 결과 기반 분석 및 답변 생성
-    model: qwen2.5:14b
+    model: qwen3.5:0.8b
     backend: null
     temperature: 0.1
     tools:
