@@ -5,14 +5,15 @@ graph.py - LangGraph 상태 그래프 조립
   orchestrator → (query_rewriter) → retriever → analyst → (retriever 루프백)
 
 사용법:
-  from src.agents.graph import build_graph, run_query
+  from src.agents.graph import build_graph, run_query, run_query_stream
   graph = build_graph(config)
   result = run_query(graph, "2024년 총자산은?")
+  for event in run_query_stream(graph, "2024년 총자산은?"):
+      print(event["node"], event["update"])
 """
 
 from __future__ import annotations
-from typing import TypedDict, Annotated, Any
-import operator
+from typing import TypedDict, Any
 
 from langgraph.graph import StateGraph, END
 
@@ -76,7 +77,7 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     # LLM 인스턴스 생성 (에이전트별 백엔드)
     orchestrator_llm = create_llm("orchestrator", config)
     rewriter_llm = create_llm("query_rewriter", config)
-    retriever_llm = create_llm("retriever", config)  # 검색 계획 수립용
+    retriever_llm = create_llm("retriever", config)
     analyst_llm = create_llm("analyst", config)
 
     # Tool 초기화
@@ -89,7 +90,6 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     from src.tools.calculator import calculator as calc_tool
     from src.tools.chart_generator import chart_generator as chart_tool
 
-    # Tool에 DB/벡터스토어 참조 설정
     init_hybrid_search(vector_store, db)
     if db:
         init_structured_query(db)
@@ -97,7 +97,7 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     parsed_md_dir = config.runtime.get("data", {}).get("parsed_md_dir", "./data/parsed_md")
     init_csv_reader(parsed_md_dir)
 
-    # DB 섹션 구조 컨텍스트 (초기화 시 한 번만 조회, 이후 클로저로 재사용)
+    # DB 섹션 구조 컨텍스트 (초기화 시 한 번만 조회)
     db_context_str = build_db_context(db)
     if db_context_str:
         print(f"[Graph] DB context built ({len(db_context_str)} chars)")
@@ -119,13 +119,18 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     rewriter_prompt = get_system_prompt("query_rewriter", config)
     analyst_prompt = get_system_prompt("analyst", config)
 
-    # ─── 노드 함수 래핑 (클로저로 LLM/tools 주입) ────────────
+    # ─── 노드 함수 래핑 (클로저로 LLM/tools/db_context 주입) ──
 
     def _orchestrator(state: GraphState) -> dict:
         return orchestrator_node(state, orchestrator_llm, system_prompt=orch_prompt)
 
     def _query_rewriter(state: GraphState) -> dict:
-        return query_rewriter_node(state, rewriter_llm, system_prompt=rewriter_prompt)
+        # db_context를 query_rewriter에도 주입 → 정확한 section 이름 참조 가능
+        return query_rewriter_node(
+            state, rewriter_llm,
+            system_prompt=rewriter_prompt,
+            db_context=db_context_str,
+        )
 
     def _retriever(state: GraphState) -> dict:
         return retriever_node(state, retriever_tools, llm=retriever_llm, db_context=db_context_str)
@@ -137,16 +142,14 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
 
     graph = StateGraph(GraphState)
 
-    # 노드 등록
     graph.add_node("orchestrator", _orchestrator)
     graph.add_node("query_rewriter", _query_rewriter)
     graph.add_node("retriever", _retriever)
     graph.add_node("analyst", _analyst)
 
-    # 엔트리포인트
     graph.set_entry_point("orchestrator")
 
-    # 엣지: orchestrator → (retriever | query_rewriter)
+    # orchestrator → (retriever | query_rewriter)
     graph.add_conditional_edges(
         "orchestrator",
         orchestrator_router,
@@ -156,13 +159,13 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
         }
     )
 
-    # 엣지: query_rewriter → retriever
+    # query_rewriter → retriever
     graph.add_edge("query_rewriter", "retriever")
 
-    # 엣지: retriever → analyst
+    # retriever → analyst
     graph.add_edge("retriever", "analyst")
 
-    # 엣지: analyst → (retriever | END)
+    # analyst → (retriever | END)
     graph.add_conditional_edges(
         "analyst",
         analyst_router,
@@ -177,18 +180,14 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
     return compiled
 
 
-# ─── 실행 ───────────────────────────────────────────────────
+# ─── 실행: 동기 ─────────────────────────────────────────────
 
 def run_query(graph, query: str, max_iterations: int = 5) -> dict:
     """
-    질문을 실행하고 결과를 반환합니다.
-
-    Args:
-        graph: 컴파일된 StateGraph
-        query: 사용자 질문
+    질문을 실행하고 결과를 반환합니다. (동기)
 
     Returns:
-        최종 상태 dict (answer, sources, calculations, errors 등)
+        {query, answer, intent, sources, calculations, charts, iterations, errors}
     """
     state = initial_state(query)
     state["max_iterations"] = max_iterations
@@ -207,6 +206,44 @@ def run_query(graph, query: str, max_iterations: int = 5) -> dict:
     }
 
 
+# ─── 실행: 스트리밍 (Streamlit 진행 표시용) ──────────────────
+
+def run_query_stream(graph, query: str, max_iterations: int = 5):
+    """
+    제너레이터: 각 노드 실행 후 진행 상황을 yield.
+
+    Yields:
+        {
+          "node": str,          # 노드 이름 ("orchestrator", "retriever" 등)
+          "update": dict,       # 해당 노드의 state 업데이트
+          "state": dict,        # 누적된 전체 상태
+        }
+
+    마지막 이벤트:
+        {"node": "__end__", "update": {}, "state": <최종 상태>}
+    """
+    state = initial_state(query)
+    state["max_iterations"] = max_iterations
+
+    current = dict(state)
+
+    for event in graph.stream(current):
+        node_name = list(event.keys())[0]
+        update = event[node_name]
+        current.update(update)
+        yield {
+            "node": node_name,
+            "update": update,
+            "state": dict(current),
+        }
+
+    yield {
+        "node": "__end__",
+        "update": {},
+        "state": dict(current),
+    }
+
+
 # ─── CLI 테스트 ──────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -217,7 +254,6 @@ if __name__ == "__main__":
     config = load_config()
     db = AuditDB(config.db_path)
 
-    # 벡터스토어는 None (아직 미구현)
     graph = build_graph(config, db=db, vector_store=None)
 
     query = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "2024년 삼성전자 총자산은?"

@@ -43,6 +43,11 @@ def hybrid_search(
     Returns:
         검색 결과 JSON. 각 결과에 vector_rank, bm25_rank, rrf_score 포함.
     """
+    print(
+        f"[HybridSearch] ▶ query='{query}', top_k={top_k}, year={year}, "
+        f"section_h2='{section_h2}', mode={mode}",
+        flush=True,
+    )
     candidates = {}  # chunk_id → result dict
 
     # ─── 벡터 검색 ───────────────────────────────────────────
@@ -134,4 +139,11 @@ def hybrid_search(
         if len(r["content"]) > 1500:
             r["content"] = r["content"][:1500] + "...[truncated]"
 
+    vec_count = sum(1 for r in candidates.values() if r.get("vector_rank", 0) > 0)
+    bm25_count = sum(1 for r in candidates.values() if r.get("bm25_rank", 0) > 0)
+    print(
+        f"[HybridSearch] ◀ total_candidates={len(candidates)} "
+        f"(vector={vec_count}, bm25={bm25_count}) → top_k={len(top_results)}",
+        flush=True,
+    )
     return json.dumps(top_results, ensure_ascii=False, indent=2)

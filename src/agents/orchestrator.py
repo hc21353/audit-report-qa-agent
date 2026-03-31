@@ -25,7 +25,7 @@ def orchestrator_node(state: dict, llm, system_prompt: str = "") -> dict:
         업데이트된 state 필드들
     """
     user_query = state["user_query"]
-    print(f"[Orchestrator] Start: {user_query[:50]}", flush=True)
+    print(f"[Orchestrator] ▶ INPUT: '{user_query}'", flush=True)
     t0 = time.time()
 
     # 1. 규칙 기반 사전 분석 (LLM 호출 전 빠른 판별)
@@ -63,7 +63,13 @@ def orchestrator_node(state: dict, llm, system_prompt: str = "") -> dict:
         "extracted_sections": parsed.get("sections", []),
         "sub_questions": parsed.get("sub_questions", []),
     }
-    print(f"[Orchestrator] Done in {time.time()-t0:.1f}s, intent={result['intent']}", flush=True)
+    elapsed = time.time() - t0
+    print(
+        f"[Orchestrator] ◀ OUTPUT: intent={result['intent']}, "
+        f"years={result['extracted_years']}, sections={result['extracted_sections']}, "
+        f"sub_questions={result['sub_questions']} in {elapsed:.1f}s",
+        flush=True,
+    )
     return result
 
 

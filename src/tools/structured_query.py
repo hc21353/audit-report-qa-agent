@@ -56,6 +56,12 @@ def structured_query(
     if _db is None:
         return json.dumps({"error": "Database not initialized"}, ensure_ascii=False)
 
+    print(
+        f"[StructuredQuery] ▶ years='{years}', h2='{section_h2}', h3='{section_h3}', "
+        f"h4='{section_h4}', keyword='{keyword}', content_type={content_type}, limit={limit}",
+        flush=True,
+    )
+
     # 연도 파싱
     year_list = None
     if years:
@@ -78,6 +84,10 @@ def structured_query(
     # CSV 참조 추출
     import re
     csv_re = re.compile(r"\[TABLE_CSV\]\s+(.+\.csv)")
+
+    print(f"[StructuredQuery] ◀ {len(results)} results", flush=True)
+    for r in results[:3]:
+        print(f"  year={r.get('year')}, h2={r.get('section_h2','?')}, h3={r.get('section_h3','?')[:40]}", flush=True)
 
     output = []
     for r in results:

@@ -25,13 +25,18 @@ def analyst_node(state: dict, llm, tools: dict = None, system_prompt: str = "") 
     Returns:
         answer, sources, needs_more_search, iteration 업데이트
     """
-    print(f"[Analyst] Start", flush=True)
     t0 = time.time()
     search_results = state.get("search_results", [])
     csv_data = state.get("csv_data", {})
     user_query = state["user_query"]
     intent = state.get("intent", "general")
     iteration = state.get("iteration", 0)
+
+    print(
+        f"[Analyst] ▶ INPUT: query='{user_query}', intent={intent}, "
+        f"search_results={len(search_results)}, csv_data={len(csv_data)} files, iteration={iteration}",
+        flush=True,
+    )
 
     if not search_results:
         return {
@@ -87,7 +92,16 @@ def analyst_node(state: dict, llm, tools: dict = None, system_prompt: str = "") 
     if iteration >= state.get("max_iterations", 5) - 1:
         needs_more = False
 
-    print(f"[Analyst] Done in {time.time()-t0:.1f}s, needs_more={needs_more}", flush=True)
+    elapsed = time.time() - t0
+    print(
+        f"[Analyst] ◀ OUTPUT: needs_more={needs_more}, "
+        f"sources={len(sources)}, calcs={len(calculations)}, "
+        f"answer_len={len(answer)}chars in {elapsed:.1f}s",
+        flush=True,
+    )
+    print(f"[Analyst] Answer preview: {answer[:200]}{'...' if len(answer)>200 else ''}", flush=True)
+    if needs_more:
+        print(f"[Analyst] Additional query: '{additional_query}'", flush=True)
     return {
         "answer": answer,
         "sources": sources,

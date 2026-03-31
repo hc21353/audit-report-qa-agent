@@ -12,7 +12,7 @@ from pathlib import Path
 from src.config import load_config
 from src.db import AuditDB
 from src.build_index import build_index, load_langchain_faiss, create_embedding_wrapper
-from src.agents.graph import build_graph, run_query
+from src.agents.graph import build_graph, run_query, run_query_stream
 
 
 # ─── 초기화 ─────────────────────────────────────────────────
@@ -23,17 +23,47 @@ def init_system():
     config = load_config()
     db = AuditDB(config.db_path)
 
-    # 벡터 인덱스 로드 (없으면 빌드)
     try:
         vectorstore = build_index(config, db)
     except Exception as e:
         st.warning(f"벡터 인덱스 로드 실패: {e}. 구조 검색만 사용합니다.")
         vectorstore = None
 
-    # LangGraph 빌드
     graph = build_graph(config, db=db, vector_store=vectorstore)
-
     return config, db, vectorstore, graph
+
+
+# ─── 노드 레이블 / 아이콘 ──────────────────────────────────
+
+NODE_LABELS = {
+    "orchestrator":   ("🔍", "질문 의도 분석"),
+    "query_rewriter": ("✏️", "검색 쿼리 최적화"),
+    "retriever":      ("📂", "문서 검색"),
+    "analyst":        ("💡", "답변 생성"),
+}
+
+
+def _node_detail(node: str, update: dict) -> str:
+    """노드별 진행 상세 문자열"""
+    if node == "orchestrator":
+        intent = update.get("intent", "")
+        years = update.get("extracted_years", [])
+        return f"intent=**{intent}**, years={years}"
+    elif node == "query_rewriter":
+        queries = update.get("rewritten_queries", [])
+        sem = sum(1 for q in queries if q.get("type") == "semantic")
+        stru = sum(1 for q in queries if q.get("type") == "structured")
+        return f"총 {len(queries)}개 쿼리 (시맨틱 {sem}개 · 구조 {stru}개)"
+    elif node == "retriever":
+        n = len(update.get("search_results", []))
+        csv = len(update.get("csv_data", {}))
+        return f"검색 결과 **{n}**개 · CSV **{csv}**개"
+    elif node == "analyst":
+        answer = update.get("answer", "")
+        needs = update.get("needs_more_search", False)
+        status = "추가 검색 필요" if needs else "완료"
+        return f"답변 {len(answer)}자 · {status}"
+    return ""
 
 
 # ─── 페이지 설정 ─────────────────────────────────────────────
@@ -54,7 +84,6 @@ def main():
     with st.sidebar:
         st.header("설정")
 
-        # 연도 필터
         years = config.years
         selected_years = st.multiselect(
             "연도 필터",
@@ -63,20 +92,17 @@ def main():
             help="비워두면 전체 연도 검색",
         )
 
-        # 섹션 필터
         sections = ["전체", "독립된 감사인의 감사보고서", "재무제표", "주석",
                     "내부회계관리제도 감사보고서", "외부감사 실시내용"]
         selected_section = st.selectbox("섹션 필터", sections)
 
         st.divider()
 
-        # 시스템 정보
         st.caption("시스템 정보")
         st.caption(f"임베딩: {config.active_embedding}")
         st.caption(f"청킹: {config.active_chunking}")
         st.caption(f"LLM: {config.runtime.get('llm', {}).get('default_model', '?')}")
 
-        # 디버그 토글
         show_debug = st.toggle("디버그 정보 표시", value=False)
 
     # 시스템 초기화
@@ -88,7 +114,6 @@ def main():
 
     # ─── 채팅 ────────────────────────────────────────────────
 
-    # 채팅 히스토리
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -102,66 +127,100 @@ def main():
 
     # 사용자 입력
     if prompt := st.chat_input("질문을 입력하세요 (예: 2024년 삼성전자 총자산은?)"):
-        # 사용자 메시지 표시
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         # 응답 생성
         with st.chat_message("assistant"):
-            with st.spinner("분석 중..."):
-                try:
-                    result = run_query(graph, prompt)
+            # ─── 진행 과정 표시 (st.status) ──────────────────
+            progress_log = []   # 완료된 스텝 기록
+            result_state = {}
+            retriever_count = 0
 
-                    answer = result.get("answer", "답변을 생성할 수 없습니다.")
-                    st.markdown(answer)
+            with st.status("분석 중...", expanded=True) as status:
+                for event in run_query_stream(graph, prompt):
+                    node = event["node"]
+                    update = event["update"]
+                    state = event["state"]
 
-                    # 소스 표시
-                    sources = result.get("sources", [])
-                    if sources and ui_config.get("features", {}).get("show_sources", True):
-                        with st.expander(f"📚 출처 ({len(sources)}개)"):
-                            for s in sources:
-                                st.caption(
-                                    f"연도: {s.get('year', '?')} | "
-                                    f"섹션: {s.get('section_path', '?')} | "
-                                    f"검색: {s.get('search_type', '?')}"
-                                )
+                    if node == "__end__":
+                        result_state = state
+                        break
 
-                    # 계산 결과
-                    calculations = result.get("calculations", [])
-                    if calculations:
-                        with st.expander("🔢 계산 결과"):
-                            for calc in calculations:
-                                st.write(f"**{calc.get('label', '계산')}**: "
-                                        f"{calc.get('result', '?')} "
-                                        f"({calc.get('expression', '')})")
+                    icon, label = NODE_LABELS.get(node, ("⚙️", node))
+                    detail = _node_detail(node, update)
 
-                    # 디버그
-                    debug_info = {
-                        "intent": result.get("intent", ""),
-                        "iterations": result.get("iterations", 0),
-                        "errors": result.get("errors", []),
-                        "sources_count": len(sources),
-                    }
+                    # 반복 retriever 구분
+                    if node == "retriever":
+                        retriever_count += 1
+                        if retriever_count > 1:
+                            icon, label = "🔄", f"추가 검색 #{retriever_count}"
 
-                    if show_debug:
-                        with st.expander("🔍 디버그 정보"):
-                            st.json(debug_info)
+                    step_text = f"{icon} **{label}** — {detail}" if detail else f"{icon} **{label}**"
+                    st.markdown(step_text)
+                    progress_log.append(step_text)
 
-                    # 히스토리 저장
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "debug": debug_info,
-                    })
+                    # 상태바 업데이트
+                    status.update(label=f"{icon} {label} 진행 중...")
 
-                except Exception as e:
-                    error_msg = f"오류가 발생했습니다: {e}"
-                    st.error(error_msg)
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": error_msg,
-                    })
+                status.update(label="✅ 분석 완료", state="complete")
+
+            # ─── 최종 답변 출력 ──────────────────────────────
+            answer = result_state.get("answer", "답변을 생성할 수 없습니다.")
+            st.markdown(answer)
+
+            # 소스 표시
+            sources = result_state.get("sources", [])
+            if sources and ui_config.get("features", {}).get("show_sources", True):
+                with st.expander(f"📚 출처 ({len(sources)}개)"):
+                    for s in sources:
+                        st.caption(
+                            f"연도: {s.get('year', '?')} | "
+                            f"섹션: {s.get('section_path', '?')} | "
+                            f"검색: {s.get('search_type', '?')}"
+                        )
+
+            # 계산 결과
+            calculations = result_state.get("calculations", [])
+            if calculations:
+                with st.expander("🔢 계산 결과"):
+                    for calc in calculations:
+                        st.write(
+                            f"**{calc.get('label', '계산')}**: "
+                            f"{calc.get('result', '?')} "
+                            f"({calc.get('expression', '')})"
+                        )
+
+            # 쿼리 재작성 결과 (디버그)
+            rewritten = result_state.get("rewritten_queries", [])
+            if show_debug and rewritten:
+                with st.expander("✏️ 재작성된 검색 쿼리"):
+                    for q in rewritten:
+                        tag = "🔵 시맨틱" if q.get("type") == "semantic" else "🟠 구조"
+                        st.caption(f"{tag} [{q.get('strategy','')}] {q.get('query','')}")
+                        if q.get("structured_params"):
+                            st.json(q["structured_params"])
+
+            # 디버그 정보
+            debug_info = {
+                "intent": result_state.get("intent", ""),
+                "iterations": result_state.get("iteration", 0),
+                "errors": result_state.get("errors", []),
+                "sources_count": len(sources),
+                "rewritten_queries": rewritten,
+            }
+
+            if show_debug:
+                with st.expander("🔍 전체 디버그 정보"):
+                    st.json(debug_info)
+
+            # 히스토리 저장
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": answer,
+                "debug": debug_info,
+            })
 
     # ─── 예시 질문 ───────────────────────────────────────────
 

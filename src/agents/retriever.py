@@ -1,14 +1,11 @@
 """
 retriever.py - LLM 기반 자율 검색 에이전트 노드
 
-기존: intent에 따라 하드코딩된 규칙으로 tool 선택
-변경: LLM이 사용 가능한 tool + 파라미터를 보고 직접 검색 계획을 수립
-
 흐름:
-  1. LLM에게 질문 + 의도 + 사용 가능한 tool 설명을 전달
-  2. LLM이 검색 계획(JSON)을 생성 (어떤 tool을 어떤 파라미터로 호출할지)
-  3. 계획에 따라 tool 순차 실행
-  4. 결과가 부족하면 LLM이 추가 검색 계획 생성 (최대 2라운드)
+  1. rewritten_queries에서 structured_params가 있는 쿼리는 직접 실행 (LLM 우회)
+  2. semantic 쿼리는 LLM에게 검색 계획 수립 요청
+  3. 결과 부족 시 LLM이 추가 검색 계획 생성 (Round 2)
+  4. 여전히 결과 없으면 BM25 폴백
   5. [TABLE_CSV] 태그 감지 시 csv_reader 자동 호출
 """
 
@@ -37,7 +34,7 @@ TOOL_DESCRIPTIONS = """사용 가능한 검색 도구:
    - 파라미터:
      years (str): 쉼표 구분 연도 (예: "2022,2023,2024")
      section_h2 (str): 대분류 (정확 매칭)
-     section_h3 (str): 주석 번호 (부분 매칭, 예: "특수관계자")
+     section_h3 (str): 주석 번호 (부분 매칭, 예: "3.")
      section_h4 (str): 세부 항목
      section_h5 (str): 세세부 항목
      keyword (str): 본문 키워드
@@ -55,7 +52,7 @@ TOOL_DESCRIPTIONS = """사용 가능한 검색 도구:
 - 주석 상세 내용은 section_h2="주석"에 있음
 - 감사의견, 핵심감사사항은 section_h2="독립된 감사인의 감사보고서"에 있음
 - 여러 연도 비교 시 structured_query의 years에 쉼표로 나열
-- section_h3/h4/h5는 빈 문자열로 두는 게 안전함. 모르면 h2와 keyword만 사용할 것
+- section_h3 검색은 부분 매칭 → "3." 으로 "3. 중요한 회계추정 및 가정" 검색 가능
 - 벡터 인덱스가 없을 경우 hybrid_search의 mode="bm25"를 사용할 것"""
 
 
@@ -68,7 +65,6 @@ PLANNING_PROMPT = """당신은 감사보고서 검색 전문가입니다.
 
 ## 규칙
 - 검색 계획은 1~3개의 tool 호출로 구성하세요.
-- 각 호출은 독립적이며 병렬 실행됩니다.
 - section_h2/h3는 반드시 위 "DB 실제 섹션 구조"에 있는 값만 사용하세요.
 - 재무 수치 질문은 structured_query로 재무제표 섹션을 먼저 찾으세요.
 - 잘 모르겠으면 hybrid_search를 사용하세요.
@@ -116,13 +112,12 @@ def retriever_node(state: dict, tools: dict, llm=None, db_context: str = "") -> 
     Args:
         state:      현재 그래프 상태
         tools:      {"hybrid_search", "structured_query", "list_available_sections", "csv_reader"}
-        llm:        retriever용 ChatOllama 인스턴스 (None이면 폴백 규칙 사용)
+        llm:        retriever용 ChatOllama 인스턴스
         db_context: 그래프 초기화 시 생성된 DB 섹션 구조 문자열
 
     Returns:
         search_results, csv_data 업데이트
     """
-    print(f"[Retriever] Start", flush=True)
     t0 = time.time()
     user_query = state["user_query"]
     intent = state.get("intent", "general")
@@ -130,45 +125,77 @@ def retriever_node(state: dict, tools: dict, llm=None, db_context: str = "") -> 
     rewritten = state.get("rewritten_queries", [])
     csv_data = state.get("csv_data", {})
 
-    # 추가 검색 루프
+    # 추가 검색 루프 시 쿼리 교체
     if state.get("needs_more_search") and state.get("additional_query"):
         user_query = state["additional_query"]
 
-    # 검색 쿼리 결정
-    queries = []
+    print(
+        f"[Retriever] ▶ INPUT: query='{user_query}', intent={intent}, years={years}, "
+        f"rewritten={len(rewritten)} queries",
+        flush=True,
+    )
+
+    # ─── rewritten_queries 분류 ──────────────────────────────
+    # structured: query_rewriter가 직접 파라미터 생성한 것 → LLM 우회하여 직접 실행
+    # semantic: 벡터/BM25 검색용 → LLM 플래닝으로 실행
+
+    direct_steps = []
+    semantic_queries = []
+
     for q in rewritten:
-        if q.get("query"):
-            queries.append(q["query"])
-    if not queries:
-        queries = [user_query]
+        if q.get("type") == "structured" and q.get("structured_params"):
+            params = dict(q["structured_params"])
+            # years 정규화: list → comma string
+            q_years = q.get("years", [])
+            if q_years and not params.get("years"):
+                params["years"] = ",".join(str(y) for y in q_years)
+            direct_steps.append({"tool": "structured_query", "params": params})
+        else:
+            text = q.get("query", "")
+            if text:
+                semantic_queries.append(text)
 
-    # ─── Round 1: LLM 기반 검색 계획 수립 ────────────────────
+    if not semantic_queries:
+        semantic_queries = [user_query]
 
+    # ─── Stage 1: structured_params 직접 실행 ────────────────
+
+    direct_results = []
+    if direct_steps:
+        print(f"[Retriever] Stage 1: Direct structured queries ({len(direct_steps)} steps)", flush=True)
+        direct_plan = {"steps": direct_steps}
+        direct_results = _execute_plan(direct_plan, tools, state)
+        print(f"[Retriever] Stage 1 done: {len(direct_results)} results", flush=True)
+
+    # ─── Stage 2: LLM 기반 시맨틱 검색 계획 ─────────────────
+
+    llm_results = []
     plan = None
+
     if llm:
         plan = _generate_search_plan(
             llm=llm,
             query=user_query,
             intent=intent,
             years=years,
-            rewritten_queries=queries,
+            semantic_queries=semantic_queries,
             db_context=db_context,
         )
 
     if not plan or not plan.get("steps"):
-        # LLM 실패 시 폴백: 기본 검색 계획
-        print(f"[Retriever] LLM plan failed, using fallback", flush=True)
-        plan = _fallback_plan(queries, years, intent)
+        print(f"[Retriever] LLM plan failed, using fallback plan", flush=True)
+        plan = _fallback_plan(semantic_queries, years, intent)
     else:
-        print(f"[Retriever] Plan: {plan.get('steps', [])}", flush=True)
+        print(f"[Retriever] LLM plan: {json.dumps(plan.get('steps', []), ensure_ascii=False)}", flush=True)
 
-    # ─── 계획 실행 ───────────────────────────────────────────
+    llm_results = _execute_plan(plan, tools, state)
 
-    all_results = _execute_plan(plan, tools, state)
+    # ─── Stage 3: 결과 부족 시 보완 검색 ─────────────────────
 
-    # ─── Round 2: 결과 부족 시 추가 검색 (선택적) ─────────────
+    all_results = direct_results + llm_results
 
     if llm and len(all_results) < 3:
+        print(f"[Retriever] Stage 3: Refine search (only {len(all_results)} results so far)", flush=True)
         refine_plan = _generate_refine_plan(
             llm=llm,
             query=user_query,
@@ -176,27 +203,29 @@ def retriever_node(state: dict, tools: dict, llm=None, db_context: str = "") -> 
             db_context=db_context,
         )
         if refine_plan and refine_plan.get("steps"):
-            extra_results = _execute_plan(refine_plan, tools, state)
-            all_results.extend(extra_results)
+            extra = _execute_plan(refine_plan, tools, state)
+            all_results.extend(extra)
+            print(f"[Retriever] Stage 3 done: +{len(extra)} results", flush=True)
 
-    # ─── 최종 폴백: 여전히 결과 없으면 BM25 단독 검색 ─────────
-    if not all_results and queries:
-        print(f"[Retriever] Zero results, fallback BM25 search", flush=True)
+    # ─── Stage 4: BM25 최종 폴백 ─────────────────────────────
+
+    if not all_results and semantic_queries:
+        print(f"[Retriever] Stage 4: BM25 fallback", flush=True)
         try:
-            fallback_result = tools["hybrid_search"].invoke({
-                "query": queries[0],
+            fb = tools["hybrid_search"].invoke({
+                "query": semantic_queries[0],
                 "top_k": 10,
                 "mode": "bm25",
                 "year": years[0] if len(years) == 1 else 0,
             })
-            fallback_parsed = json.loads(fallback_result)
-            if isinstance(fallback_parsed, list):
-                for r in fallback_parsed:
+            fb_parsed = json.loads(fb)
+            if isinstance(fb_parsed, list):
+                for r in fb_parsed:
                     r["search_type"] = "hybrid_search"
-                all_results.extend(fallback_parsed)
-                print(f"[Retriever] Fallback BM25 → {len(fallback_parsed)} results", flush=True)
+                all_results.extend(fb_parsed)
+                print(f"[Retriever] Stage 4 done: {len(fb_parsed)} results", flush=True)
         except Exception as e:
-            print(f"[Retriever] Fallback BM25 failed: {e}", flush=True)
+            print(f"[Retriever] Stage 4 failed: {e}", flush=True)
 
     # ─── 중복 제거 ───────────────────────────────────────────
 
@@ -210,6 +239,7 @@ def retriever_node(state: dict, tools: dict, llm=None, db_context: str = "") -> 
 
     # ─── CSV 자동 로드 ───────────────────────────────────────
 
+    csv_loaded = 0
     if "csv_reader" in tools:
         for r in unique_results:
             content = r.get("content", "")
@@ -223,6 +253,7 @@ def retriever_node(state: dict, tools: dict, llm=None, db_context: str = "") -> 
                                 "csv_path": ref,
                                 "output_format": "markdown",
                             })
+                            csv_loaded += 1
                         except Exception as e:
                             csv_data[ref] = f"[CSV_ERROR] {e}"
 
@@ -233,19 +264,32 @@ def retriever_node(state: dict, tools: dict, llm=None, db_context: str = "") -> 
         reverse=True,
     )
 
-    print(f"[Retriever] Done in {time.time()-t0:.1f}s, results={len(unique_results)}", flush=True)
+    final = unique_results[:20]
+    elapsed = time.time() - t0
+
+    print(
+        f"[Retriever] ◀ OUTPUT: {len(final)} results (csv_loaded={csv_loaded}) in {elapsed:.1f}s",
+        flush=True,
+    )
+    for i, r in enumerate(final[:5]):
+        print(
+            f"  #{i+1} [{r.get('search_type','?')}] year={r.get('year','?')} "
+            f"section={r.get('section_path','?')[:60]} score={r.get('rrf_score', r.get('score',0)):.4f}",
+            flush=True,
+        )
+
     return {
-        "search_results": unique_results[:20],
+        "search_results": final,
         "csv_data": csv_data,
         "needs_more_search": False,
     }
 
 
-# ─── LLM 기반 검색 계획 생성 ────────────────────────────────
+# ─── LLM 기반 검색 계획 ─────────────────────────────────────
 
 def _generate_search_plan(llm, query: str, intent: str, years: list,
-                          rewritten_queries: list, db_context: str = "") -> dict:
-    """LLM에게 검색 계획을 요청"""
+                          semantic_queries: list, db_context: str = "") -> dict:
+    """LLM에게 시맨틱 검색 계획을 요청"""
     context = f"""## 사용자 질문
 {query}
 
@@ -255,8 +299,8 @@ def _generate_search_plan(llm, query: str, intent: str, years: list,
 ## 추출된 연도
 {years if years else "없음 (전체 연도)"}
 
-## 재작성된 쿼리
-{json.dumps(rewritten_queries, ensure_ascii=False)}"""
+## 시맨틱 검색 쿼리 후보 (query_rewriter 생성)
+{json.dumps(semantic_queries, ensure_ascii=False)}"""
 
     prompt = PLANNING_PROMPT.format(
         tool_descriptions=TOOL_DESCRIPTIONS,
@@ -265,20 +309,21 @@ def _generate_search_plan(llm, query: str, intent: str, years: list,
 
     try:
         t0 = time.time()
-        print(f"[Retriever] LLM plan call start (prompt_len={len(prompt)})", flush=True)
+        print(f"[Retriever] LLM plan call (prompt={len(prompt)}chars)", flush=True)
         response = llm.invoke([
             SystemMessage(content="당신은 검색 계획 수립 전문가입니다. JSON만 반환하세요. /no_think"),
             HumanMessage(content=prompt),
         ])
-        print(f"[Retriever] LLM plan call done in {time.time()-t0:.1f}s", flush=True)
+        elapsed = time.time() - t0
+        print(f"[Retriever] LLM plan done in {elapsed:.1f}s", flush=True)
         return _parse_plan_json(response.content)
     except Exception as e:
-        print(f"[Retriever] Plan generation failed: {e}")
+        print(f"[Retriever] Plan generation failed: {e}", flush=True)
         return {}
 
 
 def _generate_refine_plan(llm, query: str, results: list, db_context: str = "") -> dict:
-    """결과 부족 시 추가 검색 계획 생성"""
+    """결과 부족 시 추가 검색 계획"""
     summary = f"현재 {len(results)}개 결과. "
     if results:
         sections = set(r.get("section_path", "?")[:50] for r in results[:5])
@@ -306,7 +351,7 @@ def _generate_refine_plan(llm, query: str, results: list, db_context: str = "") 
 # ─── 계획 실행 ───────────────────────────────────────────────
 
 def _execute_plan(plan: dict, tools: dict, state: dict) -> list:
-    """검색 계획의 각 step을 실행"""
+    """검색 계획의 각 step을 실행하고 결과 수집"""
     all_results = []
     steps = plan.get("steps", [])
 
@@ -318,6 +363,8 @@ def _execute_plan(plan: dict, tools: dict, state: dict) -> list:
             state.setdefault("errors", []).append(f"Unknown tool: {tool_name}")
             continue
 
+        print(f"[Retriever] ▶ Tool '{tool_name}' params={json.dumps(params, ensure_ascii=False)}", flush=True)
+
         try:
             result_json = tools[tool_name].invoke(params)
             parsed = json.loads(result_json)
@@ -326,22 +373,22 @@ def _execute_plan(plan: dict, tools: dict, state: dict) -> list:
                 for r in parsed:
                     r["search_type"] = tool_name
                 all_results.extend(parsed)
-                print(f"[Retriever] {tool_name} → {len(parsed)} results", flush=True)
+                print(f"[Retriever] ◀ Tool '{tool_name}' → {len(parsed)} results", flush=True)
+
             elif isinstance(parsed, dict) and "error" in parsed:
-                print(f"[Retriever] {tool_name} error: {parsed['error']}", flush=True)
-                state.setdefault("errors", []).append(
-                    f"{tool_name}: {parsed['error']}"
-                )
+                print(f"[Retriever] ◀ Tool '{tool_name}' error: {parsed['error']}", flush=True)
+                state.setdefault("errors", []).append(f"{tool_name}: {parsed['error']}")
+
         except json.JSONDecodeError:
-            print(f"[Retriever] {tool_name} non-JSON result: {str(result_json)[:100]}", flush=True)
+            print(f"[Retriever] ◀ Tool '{tool_name}' non-JSON: {str(result_json)[:100]}", flush=True)
         except Exception as e:
-            print(f"[Retriever] {tool_name} exception: {e}", flush=True)
+            print(f"[Retriever] ◀ Tool '{tool_name}' exception: {e}", flush=True)
             state.setdefault("errors", []).append(f"{tool_name} error: {e}")
 
     return all_results
 
 
-# ─── 폴백: LLM 없을 때 규칙 기반 계획 ───────────────────────
+# ─── 폴백 계획 ──────────────────────────────────────────────
 
 def _fallback_plan(queries: list, years: list, intent: str) -> dict:
     """LLM 없을 때 사용하는 기본 검색 계획"""
@@ -350,7 +397,6 @@ def _fallback_plan(queries: list, years: list, intent: str) -> dict:
     years_str = ",".join(str(y) for y in years) if years else ""
 
     if intent in ("comparison", "trend"):
-        # 구조 검색으로 연도별 데이터 확보
         steps.append({
             "tool": "structured_query",
             "params": {
@@ -360,7 +406,6 @@ def _fallback_plan(queries: list, years: list, intent: str) -> dict:
             },
         })
 
-    # 항상 하이브리드 검색도 수행
     for q in queries[:2]:
         steps.append({
             "tool": "hybrid_search",
@@ -379,7 +424,6 @@ def _fallback_plan(queries: list, years: list, intent: str) -> dict:
 
 def _parse_plan_json(text: str) -> dict:
     """LLM 응답에서 검색 계획 JSON 추출"""
-    # ```json 블록
     json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if json_match:
         try:
@@ -387,7 +431,6 @@ def _parse_plan_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    # 직접 파싱
     try:
         start = text.index("{")
         end = text.rindex("}") + 1
@@ -397,7 +440,7 @@ def _parse_plan_json(text: str) -> dict:
 
 
 def _extract_core_keyword(query: str) -> str:
-    """쿼리에서 핵심 키워드 1~2개 추출"""
+    """쿼리에서 핵심 키워드 1~3개 추출"""
     stopwords = {"삼성전자", "삼성", "은", "는", "이", "가", "을", "를", "의",
                  "해줘", "해주세요", "알려줘", "설명해줘", "보여줘", "얼마",
                  "무엇", "어떻게", "년", "년도"}
