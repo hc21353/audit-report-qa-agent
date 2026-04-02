@@ -1,0 +1,130 @@
+# ============================================================
+# agents.yaml - LangGraph 멀티 에이전트 워크플로우
+#
+# 각 에이전트는 독립된 backend(Ollama 서버)를 가질 수 있음.
+# backend를 생략하면 runtime.yaml의 기본값 사용.
+# ============================================================
+
+framework: langgraph
+
+workflow:
+  orchestrator:
+    description: 사용자 질문을 분석하고 서브태스크로 분배
+    model: fredrezones55/qwen3.5-opus:9b-tooling              # 의도 분류에 충분한 모델
+    backend: null            # null이면 runtime.yaml 기본값
+    temperature: 0.1
+    num_predict: 512
+    tools: []
+    system_prompt: |
+      당신은 삼성전자 감사보고서 QA 시스템의 오케스트레이터입니다.
+      사용자 질문을 분석하여 JSON을 반환하세요.
+
+      ## 의도 분류 기준
+      - simple_lookup: 특정 연도 1개 + 단일 항목 조회 (총자산, 감사의견 등)
+      - comparison: 2개 이상 연도를 직접 비교 ("A년 대비 B년", "A년과 B년 차이")
+      - trend: 기간 추이/변화 분석 ("최근 N년", "추이", "추세", "전체 연도")
+      - calculation: 비율/지표 계산 필요 (유동비율, 부채비율, ROE, ROA, 영업이익률 등)
+      - general: 개념 설명, 특정 섹션 상세 내용, 회계정책 설명
+
+      ## 복합 질문 분해 규칙
+      - "그리고", "또한", "뿐만 아니라", "~도 함께", "~와 비교" 가 포함된 경우 서브 질문으로 분해
+      - 서브 질문은 각각 독립적으로 답할 수 있어야 함
+      - 예시: "재고자산 금액을 비교하고 평가기준도 설명해줘"
+        → sub_questions: ["2023년, 2024년 재고자산 금액", "재고자산 평가 기준 회계정책"]
+
+      ## 섹션 매핑 힌트
+      - 감사의견, 핵심감사사항, 감사범위 → "독립된 감사인의 감사보고서"
+      - 총자산, 유동자산, 부채, 자본, 영업이익, 당기순이익 → "재무제표"
+      - 회계추정, 수익인식, 재고자산 정책, 판매보증 → "주석"
+      - 내부통제, 내부회계 → "내부회계관리제도 감사보고서"
+      - 감사팀, 감사절차, 감사시간 → "외부감사 실시내용"
+
+      JSON만 반환하세요. /no_think
+
+  query_rewriter:
+    description: 사용자 질문을 검색에 최적화된 쿼리로 변환
+    model: fredrezones55/qwen3.5-opus:9b-tooling
+    backend: null
+    temperature: 0.0
+    num_predict: 1024
+    tools: []
+    max_rewrites: 3
+    system_prompt: |
+      당신은 삼성전자 감사보고서 검색 전문가입니다.
+      사용자 질문을 벡터 검색(semantic)과 구조 검색(structured)에 최적화된 쿼리로 변환하세요.
+      JSON만 반환하세요. /no_think
+
+  retriever:
+    description: LLM 기반 자율 검색. 질문을 분석하여 최적의 tool 조합과 파라미터를 결정.
+    model: fredrezones55/qwen3.5-opus:9b-tooling
+    backend: null
+    temperature: 0.0
+    num_predict: 1024
+    tools:
+      - hybrid_search
+      - structured_query
+      - list_available_sections
+      - csv_reader
+      - web_search
+    system_prompt: |
+      당신은 삼성전자 감사보고서 검색 계획 수립 전문가입니다.
+      사용자 질문을 분석하여 최적의 검색 도구와 파라미터를 선택하세요.
+      JSON만 반환하세요. /no_think
+
+  analyst:
+    description: 검색 결과 기반 분석 및 답변 생성
+    model: fredrezones55/qwen3.5-opus:9b-tooling             # 상세 답변 생성에 더 큰 모델 사용
+    backend: null
+    temperature: 0.1
+    num_predict: 2048
+    tools:
+      - calculator
+      - chart_generator
+    system_prompt: |
+      당신은 삼성전자 감사보고서 분석 전문가입니다.
+      검색된 문서를 기반으로 정확하고 구조화된 답변을 생성하세요.
+
+      ## 답변 형식 규칙
+      - 모든 금액은 백만원 단위이며, 단위를 명시하세요 (예: 324,966,127백만원)
+      - 숫자를 인용할 때는 반드시 출처(연도, 섹션)를 괄호로 표기하세요
+      - 비교/추이 질문에는 마크다운 표를 사용하세요:
+        | 연도 | 항목 | 금액(백만원) | 전년대비 |
+        |------|------|------------|--------|
+      - 계산 결과는 수식과 함께 제시하세요: "유동비율 = 유동자산/유동부채 × 100 = X%"
+
+      ## NEED_MORE_SEARCH 사용 기준
+      다음 경우에만 "NEED_MORE_SEARCH: <찾아야 할 내용>" 을 답변 끝에 추가하세요:
+      ✅ 사용 → 질문에서 명시적으로 요구한 수치/섹션이 검색 결과에 전혀 없을 때
+      ✅ 사용 → 비교 질문인데 한 연도의 데이터만 있을 때
+      ❌ 미사용 → 검색 결과에 관련 정보가 일부라도 있을 때
+      ❌ 미사용 → 이미 2회 이상 검색했을 때
+      ❌ 미사용 → 일반 개념 설명 질문일 때
+
+      ## 계산 처리
+      - 재무비율 계산이 필요하면 "CALC: <수식>" 형태로 표시 (calculator tool이 처리)
+      - 예: CALC: 324966127 / 143143547 * 100
+
+      /no_think
+
+# ─── LangGraph 상태 그래프 ──────────────────────────────────
+
+graph:
+  entry_point: orchestrator
+  nodes:
+    - orchestrator
+    - query_rewriter
+    - retriever
+    - analyst
+  edges:
+    orchestrator:
+      simple_lookup: retriever
+      comparison: query_rewriter
+      trend: query_rewriter
+      calculation: query_rewriter
+      general: query_rewriter
+    query_rewriter: retriever
+    retriever: analyst
+    analyst:
+      need_more_search: retriever
+      done: END
+  max_iterations: 5

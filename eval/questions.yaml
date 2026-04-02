@@ -1,0 +1,255 @@
+# ============================================================
+# questions.yaml - 평가용 질문셋
+#
+# expected_answer 작성 요령:
+#   - 수치가 있는 경우 단위까지 정확히 기재 (예: "324,966,127백만원")
+#   - 여러 항목이면 줄바꿈 없이 세미콜론으로 구분
+#   - 확인되지 않은 항목은 빈 문자열("")로 유지
+#   - LLM judge가 이 값을 accuracy 채점 기준으로 사용함
+# ============================================================
+
+questions:
+
+  # ──────────────────────────────────────────────────────────
+  # 단순 조회 (simple_lookup)
+  # ──────────────────────────────────────────────────────────
+
+  - id: q01
+    question: "2024년 삼성전자의 총자산은 얼마인가?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: "324,966,127백만원"
+    expected_answer: ""   # 예: "2024년 삼성전자 총자산은 324,966,127백만원이며 전년 대비 X% 증가하였습니다."
+
+  - id: q02
+    question: "2024년 핵심감사사항은 무엇인가?"
+    type: section_lookup
+    expected_year: 2024
+    expected_section: "독립된 감사인의 감사보고서"
+    ground_truth: ""
+    expected_answer: ""   # 예: "2024년 핵심감사사항은 (1) ... (2) ... 입니다."
+
+  - id: q03
+    question: "2024년 감사의견은?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: "적정"
+    expected_answer: ""   # 예: "2024년 삼성전자 재무제표에 대한 감사의견은 적정입니다."
+
+  - id: q04
+    question: "2022년 감사의견은?"
+    type: simple_lookup
+    expected_year: 2022
+    ground_truth: "적정"
+    expected_answer: ""
+
+  - id: q05
+    question: "2024년 삼성전자의 영업이익은 얼마인가?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q06
+    question: "2023년 삼성전자의 당기순이익은?"
+    type: simple_lookup
+    expected_year: 2023
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q07
+    question: "2024년 유동자산 총액은?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q08
+    question: "2023년 주석 3에서 중요한 회계추정 및 가정을 설명해줘"
+    type: section_lookup
+    expected_year: 2023
+    expected_section: "주석 > 3. 중요한 회계추정 및 가정"
+    ground_truth: ""
+    expected_answer: ""   # 예: "2023년 주석 3의 중요한 회계추정 및 가정에는 다음이 포함됩니다: 가. 수익인식 ..., 나. 판매보증충당부채 ..."
+
+  - id: q09
+    question: "2024년 감사보고서의 감사범위는 어떻게 되나요?"
+    type: section_lookup
+    expected_year: 2024
+    expected_section: "독립된 감사인의 감사보고서"
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q10
+    question: "2021년 주요 회계추정 가정 중 판매보증충당부채 내용을 알려줘"
+    type: section_lookup
+    expected_year: 2021
+    ground_truth: ""
+    expected_answer: ""
+
+  # ──────────────────────────────────────────────────────────
+  # 연도 비교 (year_comparison)
+  # ──────────────────────────────────────────────────────────
+
+  - id: q11
+    question: "2018년 대비 2022년 부채 구조가 어떻게 변했는가?"
+    type: year_comparison
+    expected_years: [2018, 2022]
+    ground_truth: ""
+    expected_answer: ""   # 예: "2018년 총부채 X백만원 → 2022년 Y백만원으로 Z% 변화. 유동부채 비중은 ..."
+
+  - id: q12
+    question: "2020년과 2024년의 유동자산 구성 차이를 설명해줘"
+    type: year_comparison
+    expected_years: [2020, 2024]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q13
+    question: "2019년과 2023년의 핵심감사사항을 비교해줘"
+    type: year_comparison
+    expected_years: [2019, 2023]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q14
+    question: "2021년과 2024년 총자산 및 자기자본 변화를 비교 분석해줘"
+    type: year_comparison
+    expected_years: [2021, 2024]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q15
+    question: "2022년과 2023년의 영업이익 차이와 그 배경을 설명해줘"
+    type: year_comparison
+    expected_years: [2022, 2023]
+    ground_truth: ""
+    expected_answer: ""
+
+  # ──────────────────────────────────────────────────────────
+  # 트렌드 분석 (trend_analysis)
+  # ──────────────────────────────────────────────────────────
+
+  - id: q16
+    question: "최근 5년간 유동자산 추이를 설명해줘"
+    type: trend_analysis
+    expected_years: [2020, 2021, 2022, 2023, 2024]
+    ground_truth: ""
+    expected_answer: ""   # 예: "2020년 X → 2021년 Y → ... → 2024년 Z. 전반적으로 증가/감소 추세..."
+
+  - id: q17
+    question: "감사의견이 변경된 연도가 있는가? 전체 연도 기준으로 알려줘"
+    type: trend_analysis
+    expected_years: "all"
+    ground_truth: ""
+    expected_answer: ""   # 예: "2014년~2024년 전 기간 모두 '적정' 의견이었으며 변경된 연도는 없습니다."
+
+  - id: q18
+    question: "2015년부터 2024년까지 총자산 변화 추이를 요약해줘"
+    type: trend_analysis
+    expected_years: "2015-2024"
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q19
+    question: "최근 3년간 핵심감사사항의 주요 변화가 있었는지 설명해줘"
+    type: trend_analysis
+    expected_years: [2022, 2023, 2024]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q20
+    question: "2019년부터 2024년까지 부채비율은 어떻게 변화했는가?"
+    type: trend_analysis
+    expected_years: [2019, 2020, 2021, 2022, 2023, 2024]
+    ground_truth: ""
+    expected_answer: ""
+
+  # ──────────────────────────────────────────────────────────
+  # 재무비율 계산 (calculation)
+  # ──────────────────────────────────────────────────────────
+
+  - id: q21
+    question: "2024년 유동비율과 부채비율을 계산해줘"
+    type: calculation
+    expected_year: 2024
+    expected_tools: [calculator]
+    ground_truth: ""
+    expected_answer: ""   # 예: "유동비율 = 유동자산/유동부채 × 100 = X%; 부채비율 = 부채총계/자본총계 × 100 = Y%"
+
+  - id: q22
+    question: "최근 3년 ROA 추이를 보여줘"
+    type: calculation
+    expected_years: [2022, 2023, 2024]
+    expected_tools: [calculator]
+    ground_truth: ""
+    expected_answer: ""   # 예: "2022년 ROA = X%, 2023년 ROA = Y%, 2024년 ROA = Z%"
+
+  - id: q23
+    question: "2024년 자기자본이익률(ROE)을 계산하고 이전 연도와 비교해줘"
+    type: calculation
+    expected_years: [2023, 2024]
+    expected_tools: [calculator]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q24
+    question: "2022년, 2023년, 2024년의 영업이익률을 각각 계산해줘"
+    type: calculation
+    expected_years: [2022, 2023, 2024]
+    expected_tools: [calculator]
+    ground_truth: ""
+    expected_answer: ""
+
+  # ──────────────────────────────────────────────────────────
+  # 복합/멀티홉 (multi_hop)
+  # ──────────────────────────────────────────────────────────
+
+  - id: q25
+    question: "최근 3년 부채비율 추이를 차트로 보여줘"
+    type: multi_hop
+    expected_years: [2022, 2023, 2024]
+    expected_tools: [calculator, chart_generator]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q26
+    question: "2024년 핵심감사사항으로 선정된 항목들이 재무제표의 어떤 항목과 관련이 있는지 설명해줘"
+    type: multi_hop
+    expected_year: 2024
+    expected_sections: ["독립된 감사인의 감사보고서", "재무제표"]
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q27
+    question: "삼성전자의 수익인식 기준은 어떻게 되며, 이것이 영업이익에 미치는 영향은?"
+    type: multi_hop
+    expected_section: "주석"
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q28
+    question: "2023년과 2024년 재고자산 금액을 비교하고, 재고자산 평가 기준도 함께 설명해줘"
+    type: multi_hop
+    expected_years: [2023, 2024]
+    expected_sections: ["재무제표", "주석"]
+    ground_truth: ""
+    expected_answer: ""
+
+  # ──────────────────────────────────────────────────────────
+  # 개념/설명 (general_explain)
+  # ──────────────────────────────────────────────────────────
+
+  - id: q29
+    question: "삼성전자 감사보고서에서 내부회계관리제도 감사보고서는 어떤 내용을 담고 있나?"
+    type: general_explain
+    expected_section: "내부회계관리제도 감사보고서"
+    ground_truth: ""
+    expected_answer: ""
+
+  - id: q30
+    question: "외부감사 실시내용에서 감사팀의 구성과 감사 절차는 어떻게 설명되어 있나?"
+    type: general_explain
+    expected_section: "외부감사 실시내용"
+    ground_truth: ""
+    expected_answer: ""

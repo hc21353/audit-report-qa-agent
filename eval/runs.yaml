@@ -1,0 +1,54 @@
+# ============================================================
+# runs.yaml - 실험 조합 (임베딩 × 청킹 전략 비교)
+#
+# 주의:
+#   - LLM 모델은 agents.yaml에서 수동 설정 (여기서 변경 안 함)
+#   - embedding/chunking 조합만 변경하여 비교
+#   - 각 실험마다 해당 인덱스가 없으면 자동 빌드됨
+#     (python -m src.build_index --embedding <name> --rebuild 으로 수동 빌드 가능)
+# ============================================================
+
+output_dir: ./experiments
+
+runs:
+  # ── 메인 전략 (기준선) ────────────────────────────────────
+
+  - name: baseline_section
+    description: "기준선: 구조 기반 청킹 + multilingual-e5-large (현재 기본 설정)"
+    embedding: multilingual-e5-large
+    chunking: section_based
+    vector_store: faiss
+
+  # ── 청킹 전략 비교 (같은 임베딩 모델) ─────────────────────
+
+  - name: fixed_size_section
+    description: "청킹 비교: 고정 512자 청킹 (multilingual-e5-large)"
+    embedding: multilingual-e5-large
+    chunking: fixed_size
+    vector_store: faiss
+
+  - name: recursive_section
+    description: "청킹 비교: 재귀 분할 청킹 (multilingual-e5-large)"
+    embedding: multilingual-e5-large
+    chunking: recursive
+    vector_store: faiss
+
+  # ── 임베딩 모델 비교 (같은 청킹 전략) ─────────────────────
+
+  - name: ko_sroberta_section
+    description: "임베딩 비교: 한국어 특화 ko-sroberta (구조 기반 청킹)"
+    embedding: ko-sroberta
+    chunking: section_based
+    vector_store: faiss
+
+  - name: bge_m3_section
+    description: "임베딩 비교: 긴 문맥 bge-m3 / max_seq=8192 (구조 기반 청킹)"
+    embedding: bge-m3
+    chunking: section_based
+    vector_store: faiss
+
+  # ── 빠른 비교 (핵심 2개만) ────────────────────────────────
+  # python eval/run_eval.py --run baseline_section,ko_sroberta_section
+
+  # ── 단일 실험 재평가 ─────────────────────────────────────
+  # python eval/run_eval.py --judge-only experiments/baseline_section
