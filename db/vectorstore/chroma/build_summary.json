@@ -1,0 +1,8 @@
+{
+  "model": "nlpai-lab/KoE5",
+  "embedding_dim": 1024,
+  "total_vectors": 13154,
+  "collection_name": "samsung_audit",
+  "built_at": "2026-04-05 20:05:14",
+  "elapsed_sec": 2263.2
+}
