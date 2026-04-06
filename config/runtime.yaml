@@ -1,0 +1,66 @@
+# ============================================================
+# runtime.yaml - 런타임 환경 설정
+#
+# agents.yaml의 각 에이전트 backend가 null이면 여기 기본값 사용.
+# 에이전트별로 다른 머신의 Ollama를 지정하려면 agents.yaml에서 오버라이드.
+# ============================================================
+
+database:
+  type: sqlite
+  path: ./data/audit_reports.db
+
+# ─── LLM 기본 설정 (에이전트 backend가 null일 때 사용) ───────
+
+llm:
+  default_backend: http://localhost:11434   # 기본 Ollama 서버
+  default_model: qwen2.5:14b
+  timeout: 120
+
+  # 사용 가능한 모델 목록 (참조용)
+  available_models:
+    qwen2.5:14b:
+      context_length: 32768
+      use_for: [qa, analysis, orchestration]
+    qwen2.5:7b:
+      context_length: 32768
+      use_for: [query_rewrite, routing]
+    llama3.1:8b:
+      context_length: 8192
+      use_for: [qa]
+    gemma3:12b:
+      context_length: 8192
+      use_for: [qa, analysis]
+
+# ─── 에이전트별 백엔드 오버라이드 (선택사항) ─────────────────
+# agents.yaml의 backend: null을 여기서 일괄 오버라이드 가능.
+# agents.yaml에 직접 backend를 쓰면 이보다 우선함.
+
+agent_backends:
+  orchestrator: null       # null → default_backend 사용
+  query_rewriter: null
+  retriever: null
+  analyst: null
+
+  # 예시: 멀티 머신 설정
+  # orchestrator: http://192.168.1.10:11434
+  # query_rewriter: http://192.168.1.20:11434
+  # analyst: http://192.168.1.10:11434
+
+# ─── 임베딩 서버 ────────────────────────────────────────────
+
+embedding:
+  backend: local             # local | http://192.168.1.30:8001
+  # local이면 같은 프로세스에서 sentence-transformers 실행
+  # URL이면 해당 서버에 HTTP 요청
+
+# ─── 벡터 DB ────────────────────────────────────────────────
+
+vector_store:
+  backend: local             # local | http://192.168.1.40:8002
+
+# ─── 데이터 경로 ────────────────────────────────────────────
+
+data:
+  parsed_md_dir: ./data/parsed_md        # 마크다운 + CSV 파일 위치
+  vector_index_dir: ./data/vector_index  # (레거시 FAISS 경로, 미사용)
+  vector_store_dir: ./data/vectorstore/chroma  # ChromaDB 저장 경로

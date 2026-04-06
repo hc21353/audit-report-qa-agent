@@ -1,0 +1,162 @@
+# ============================================================
+# app.yaml - 프로젝트 핵심 설정
+# ============================================================
+
+project:
+  name: samsung-audit-rag
+  company: 삼성전자주식회사
+  years: [2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+  base_dir: ./data
+  log_level: INFO
+
+# ------------------------------------------------------------
+# 파싱 설정
+# ------------------------------------------------------------
+parsing:
+  input_dir: ./data/raw_html
+  output_dir: ./data/parsed_md
+
+  section_hierarchy:
+    h1: 보고서 제목
+    h2:
+      - 독립된 감사인의 감사보고서
+      - 재무제표
+      - 주석
+      - 내부회계관리제도 감사보고서
+      - 외부감사 실시내용
+    h3: 주석 번호 단위        # 예: 1. 일반적 사항
+    h4: 주석 세부 항목         # 예: 2.1 재무제표 작성기준
+    h5: 주석 세세부            # 예: 가. 회사가 채택한 제·개정 기준서
+    h6: 최하위 항목            # 예: (1) 수행의무의 식별
+
+  table_extraction:
+    output_format: markdown
+    preserve_units: true
+    unit_default: 백만원
+
+# ------------------------------------------------------------
+# 청킹 설정 (2레이어 구조)
+#   Layer 1: 마크다운 헤딩 기반 → 상위 헤딩은 DB 컬럼
+#   Layer 2: 최하위 섹션 content가 길면 추가 분할
+# ------------------------------------------------------------
+chunking:
+  active_strategy: section_based
+
+  strategies:
+    # 메인 전략
+    section_based:
+      layer1:
+        method: heading_split
+        description: "마크다운 # 기준으로 최하위 헤딩까지 분리, 각 헤딩은 DB 컬럼으로 보존"
+      layer2:
+        max_chunk_size: 1500
+        min_chunk_size: 100
+        sub_chunking_method: recursive   # recursive | sentence
+        sub_chunking_options:
+          recursive:
+            chunk_overlap: 200
+            separators: ["\n\n", "\n", ". ", " "]
+          sentence:
+            chunk_overlap: 1
+            overlap_unit: sentences
+        table_handling: keep_whole       # keep_whole | split_by_row
+        table_max_size: 3000
+
+    # 비교 베이스라인 (구조 무시, DB 메타데이터는 원본 위치 기준 매핑)
+    fixed_size:
+      chunk_size: 512
+      chunk_overlap: 64
+      preserve_metadata: true
+
+    recursive:
+      chunk_size: 1000
+      chunk_overlap: 200
+      separators: ["\n## ", "\n### ", "\n#### ", "\n##### ", "\n###### ", "\n\n", "\n"]
+      preserve_metadata: true
+
+# ------------------------------------------------------------
+# 임베딩 모델
+# active_model: 이 값은 레거시 참조용.
+# 실제 벡터 인덱스는 build_vectordb.py가 KoE5(nlpai-lab/KoE5)로 구축.
+# ------------------------------------------------------------
+embedding:
+  active_model: multilingual-e5-large   # 레거시 참조값 — 실제 운용 임베딩은 KoE5
+
+  models:
+    multilingual-e5-large:
+      name: intfloat/multilingual-e5-large
+      type: sentence-transformers
+      dimension: 1024
+      max_seq_length: 512
+      prefix_query: "query: "
+      prefix_passage: "passage: "
+      normalize: true
+
+    ko-sroberta:
+      name: jhgan/ko-sroberta-multitask
+      type: sentence-transformers
+      dimension: 768
+      max_seq_length: 512
+      prefix_query: ""
+      prefix_passage: ""
+      normalize: true
+
+    bge-m3:
+      name: BAAI/bge-m3
+      type: sentence-transformers
+      dimension: 1024
+      max_seq_length: 8192
+      prefix_query: ""
+      prefix_passage: ""
+      normalize: true
+
+    ollama-nomic:
+      name: nomic-embed-text
+      type: ollama
+      dimension: 768
+      base_url: http://localhost:11434
+      normalize: true
+
+# ------------------------------------------------------------
+# 벡터 스토어
+# active_backend: chroma (ChromaDB + KoE5, 현재 운용 중)
+# 실제 경로는 runtime.yaml data.vector_store_dir 우선 사용
+# ------------------------------------------------------------
+vector_store:
+  active_backend: chroma
+
+  backends:
+    chroma:
+      persist_dir: ./data/vectorstore/chroma
+      collection_name: samsung_audit
+      embedding_model: nlpai-lab/KoE5   # KoE5 (한국어 특화, 1024dim)
+      distance_function: cosine
+
+    faiss:                               # 레거시 — 현재 미사용
+      index_type: FlatIP
+      index_dir: ./data/legacy/vector_index/faiss
+      index_name_template: "{embedding_model}_{chunking_strategy}"
+
+  search:
+    top_k: 10
+    score_threshold: 0.5
+    rerank:
+      enabled: false
+      model: cross-encoder/ms-marco-MiniLM-L-12-v2
+      top_k_after_rerank: 5
+
+# ------------------------------------------------------------
+# 인터페이스
+# ------------------------------------------------------------
+interface:
+  type: streamlit
+  port: 8501
+  title: 삼성전자 감사보고서 QA 시스템
+  features:
+    chat_mode: true
+    show_sources: true
+    show_retrieved_chunks: true
+    year_selector: true
+    section_filter_ui: true
+    chart_display: true
+    experiment_dashboard: false

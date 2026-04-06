@@ -1,22 +1,25 @@
-sentence-transformers>=2.7.0
-chromadb>=0.5.0
-faiss-cpu>=1.8.0
-torch>=2.0.0
-transformers>=4.40.0
+# Core
+pyyaml>=6.0
 
-# DB / Data
-pandas>=2.0.0
-numpy>=1.26.0
+# LangGraph + LangChain
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
 
-# Parsing (Step 1 - already done, but keep for reproducibility)
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
-markdownify>=0.12.0
+# LLM (Ollama)
+# ollama 서버는 별도 설치 필요
 
-# CI/CD & Dev
-pytest>=8.0.0
-python-dotenv>=1.0.0
+# Embedding
+sentence-transformers>=2.2.0
 
-# App (Step 4)
-streamlit>=1.35.0
-openai>=1.30.0       # or anthropic>=0.25.0
+# Vector Store
+faiss-cpu>=1.7.4
+# chromadb>=0.4.0   # 선택사항
+
+# UI
+streamlit>=1.30.0
+plotly>=5.18.0
+
+# Web Search
+ddgs>=1.0.0

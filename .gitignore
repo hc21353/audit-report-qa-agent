@@ -1,7 +1,4 @@
-.env
+# /data
 __pycache__/
-.DS_Store
-data/raw/*.html
-data/processed/
-chroma_db/
-.venv/
+*.pyc
+*.pyo

@@ -1,0 +1,56 @@
+# ============================================================
+# runs.yaml - 평가 실험 설정
+#
+# 생성 모델과 채점 모델은 분리되어 있음:
+#   - 생성 모델: 각 run의 model / models 필드로 지정 (없으면 agents.yaml 기본값)
+#   - 채점 모델: eval/judge.py의 JUDGE_MODEL 상수로 고정 (항상 동일)
+#
+# 모델 오버라이드 우선순위:
+#   CLI --model > run.models (에이전트별) > run.model (전체 동일) > agents.yaml
+#
+# 사용법:
+#   python eval/run_eval.py                              # 전체 실험
+#   python eval/run_eval.py --run koe5_qwen3.5           # 단일 실험
+#   python eval/run_eval.py --model qwen2.5:14b          # 전체 실험 모델 오버라이드
+#   python eval/run_eval.py --questions q01,q05          # 특정 질문만
+#   python eval/run_eval.py --skip-judge                 # Judge 없이 답변만
+# ============================================================
+
+output_dir: ./experiments
+
+runs:
+  # ── 기본 설정 (agents.yaml 모델 그대로) ──────────────────
+
+  - name: koe5_default
+    description: "기본: ChromaDB + KoE5 + agents.yaml 기본 모델"
+    vector_store: chroma
+    # model 미지정 → agents.yaml의 모델 사용
+
+  # ── LLM 모델 비교 실험 ────────────────────────────────────
+  # 채점은 judge.py의 JUDGE_MODEL로 고정되므로 공정한 비교 가능
+
+  # - name: koe5_qwen2.5_14b
+  #   description: "비교: ChromaDB + KoE5 + qwen2.5:14b (전체 에이전트 동일)"
+  #   vector_store: chroma
+  #   model: qwen2.5:14b
+
+  # - name: koe5_qwen2.5_7b
+  #   description: "비교: ChromaDB + KoE5 + qwen2.5:7b (경량 모델)"
+  #   vector_store: chroma
+  #   model: qwen2.5:7b
+
+  # - name: koe5_mixed_models
+  #   description: "비교: 에이전트별 모델 분리 (retriever/analyst만 14b)"
+  #   vector_store: chroma
+  #   models:                              # 에이전트별 개별 지정
+  #     orchestrator:   qwen2.5:7b
+  #     query_rewriter: qwen2.5:7b
+  #     retriever:      qwen2.5:14b        # ★ 검색 계획은 더 큰 모델
+  #     analyst:        qwen2.5:14b        # ★ 답변 생성은 더 큰 모델
+
+  # ── 임베딩 모델 비교 실험 ─────────────────────────────────
+  # 새 임베딩 모델로 build_vectordb.py 재실행 후 아래처럼 추가:
+  #
+  # - name: kure_v1_chroma
+  #   description: "비교: ChromaDB + KURE-v1"
+  #   vector_store: chroma
