@@ -271,7 +271,7 @@ def build_index(
     chunking_strategy = config.active_chunking
 
     vs_config = config.app.get("vector_store", {}).get("backends", {}).get(vs_backend, {})
-    index_dir = vs_config.get("index_dir", f"./data/vector_index/{vs_backend}")
+    index_dir = vs_config.get("index_dir", f"./db/vector_index/{vs_backend}")
     index_name_template = vs_config.get("index_name_template", "{embedding_model}_{chunking_strategy}")
     index_name = index_name_template.format(
         embedding_model=emb_name.replace("/", "_").replace(":", "_"),

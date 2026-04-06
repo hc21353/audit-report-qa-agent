@@ -34,7 +34,7 @@ class Config:
     # 자주 쓰는 값 바로 접근
     @property
     def db_path(self) -> str:
-        return self.runtime.get("database", {}).get("path", "./data/audit_reports.db")
+        return self.runtime.get("database", {}).get("path", "./db/audit_reports.db")
 
     @property
     def years(self) -> list[int]:
@@ -60,7 +60,7 @@ class Config:
 
     @property
     def parsing_dir(self) -> str:
-        return self.app.get("parsing", {}).get("output_dir", "./data/parsed_md")
+        return self.app.get("parsing", {}).get("output_dir", "./parsed_data")
 
 
 def load_config() -> Config:

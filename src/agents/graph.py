@@ -105,7 +105,7 @@ def build_graph(config: Config, db=None, vector_store=None) -> StateGraph:
         init_structured_query(db)
         init_db_fetch(db)
 
-    parsed_md_dir = config.runtime.get("data", {}).get("parsed_md_dir", "./data/parsed_md")
+    parsed_md_dir = config.runtime.get("data", {}).get("parsed_md_dir", "./parsed_data")
     init_csv_reader(parsed_md_dir)
 
     # DB 섹션 구조 컨텍스트 (초기화 시 한 번만 조회)
@@ -340,7 +340,7 @@ if __name__ == "__main__":
         from src.build_vectordb import KoE5Embedder
 
         vector_dir = config.runtime.get("data", {}).get(
-            "vector_store_dir", "./data/vectorstore/chroma"
+            "vector_store_dir", "./db/vectorstore/chroma"
         )
         client = chromadb.PersistentClient(
             path=str(vector_dir),

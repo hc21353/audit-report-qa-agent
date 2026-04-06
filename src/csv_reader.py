@@ -187,7 +187,7 @@ def _to_dict_list(headers: list[str], data_rows: list[list[str]]) -> list[dict]:
 
 # LangGraph에서 @tool 데코레이터로 등록할 때 사용할 함수 시그니처
 
-def csv_reader_tool(csv_path: str, base_dir: str = "./data/parsed_md",
+def csv_reader_tool(csv_path: str, base_dir: str = "./parsed_data",
                     output_format: str = "markdown") -> str:
     """
     LangGraph Tool: CSV 파일을 읽어 마크다운 테이블로 반환.

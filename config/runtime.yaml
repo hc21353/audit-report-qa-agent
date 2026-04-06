@@ -7,7 +7,7 @@
 
 database:
   type: sqlite
-  path: ./data/audit_reports.db
+  path: ./db/audit_reports.db
 
 # ─── LLM 기본 설정 (에이전트 backend가 null일 때 사용) ───────
 
@@ -61,6 +61,6 @@ vector_store:
 # ─── 데이터 경로 ────────────────────────────────────────────
 
 data:
-  parsed_md_dir: ./data/parsed_md        # 마크다운 + CSV 파일 위치
-  vector_index_dir: ./data/vector_index  # (레거시 FAISS 경로, 미사용)
-  vector_store_dir: ./data/vectorstore/chroma  # ChromaDB 저장 경로
+  parsed_md_dir: ./parsed_data           # 마크다운 + CSV 파일 위치
+  vector_index_dir: ./db/vector_index    # (레거시 FAISS 경로, 미사용)
+  vector_store_dir: ./db/vectorstore/chroma  # ChromaDB 저장 경로

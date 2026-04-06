@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from src.csv_reader import read_csv, extract_csv_refs, resolve_chunk_with_tables
 from pathlib import Path
 
-_base_dir = "./data/parsed_md"
+_base_dir = "./parsed_data"
 
 
 def init_csv_reader(base_dir: str):

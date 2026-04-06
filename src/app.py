@@ -46,7 +46,7 @@ def init_system(model_overrides: tuple = ()):
         from src.build_vectordb import KoE5Embedder
 
         vector_dir = config.runtime.get("data", {}).get(
-            "vector_store_dir", "./data/vectorstore/chroma"
+            "vector_store_dir", "./db/vectorstore/chroma"
         )
         client = chromadb.PersistentClient(
             path=str(vector_dir),

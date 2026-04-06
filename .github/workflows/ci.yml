@@ -11,8 +11,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-      - run: pip install -r requirements.txt
-      - run: pytest tests/ -v
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+      
+      - name: Run setup diagnostics
+        run: |
+          python test_setup.py
+      
+      - name: Verify imports
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from src.config import load_config
+          from src.db import AuditDB
+          from src.agents.graph import build_graph
+          print('✓ 모든 import 성공')
+          "
+      
+      - name: Run pytest tests
+        run: |
+          pytest tests/ -v --tb=short
+      
+      - name: Run validation scripts
+        run: |
+          echo '=== Checking chunks ==='
+          python scripts/check_chunks.py
+          echo ''
+          echo '=== Checking database ==='
+          python scripts/check_db.py

@@ -1,16 +1,76 @@
 version: '3.8'
 
 services:
-  fintech-app:
-    build: .
+  # ============================================================
+  # Streamlit UI 서비스
+  # ============================================================
+  samsung-audit-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: samsung-audit-rag
+    
+    # 호스트 시스템의 파일을 컨테이너와 동기화
     volumes:
-      - .:/app  # [핵심] 로컬 폴더와 컨테이너 /app 폴더 동기화
+      - .:/app
+      - ./.venv:/app/.venv  # Python 가상환경 (선택사항)
+    
+    # 포트 매핑
     ports:
-      - "8501:8501" # UI 접속용 (localhost:8501)
+      - "8501:8501"  # Streamlit UI (localhost:8501)
+    
+    # 환경 변수 (민감 정보는 .env에서 로드)
     env_file:
-      - .env    # API Key 등 민감 정보 로드
+      - .env
+    
     environment:
+      # Python 버퍼링 비활성화 (실시간 로그 출력)
       - PYTHONUNBUFFERED=1
-    stdin_open: true # 디버깅을 위해 터미널 입력 허용
+      
+      # Streamlit 설정
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_CLIENT_TOOLBARPOSITION=right
+      
+      # Ollama 서버 (호스트 머신의 Ollama 서버 연결)
+      # macOS에서 host.docker.internal로 호스트 접근 가능
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    
+    # 터미널 입출력 활성화 (디버깅용)
+    stdin_open: true
     tty: true
+    
+    # 헬스체크 (Streamlit 서버 상태 모니터링)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 네트워크 설정
+    networks:
+      - audit-network
+
+  # ============================================================
+  # Ollama LLM 서버 (선택사항 - 로컬 실행하려는 경우)
+  # ============================================================
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama-server
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_MODELS=/root/.ollama/models
+  #   networks:
+  #     - audit-network
+
+networks:
+  audit-network:
+    driver: bridge
+
+# volumes:
+#   ollama-data:
+#     driver: local
