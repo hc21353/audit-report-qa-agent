@@ -76,9 +76,11 @@ chunking:
 
 # ------------------------------------------------------------
 # 임베딩 모델
+# active_model: 이 값은 레거시 참조용.
+# 실제 벡터 인덱스는 build_vectordb.py가 KoE5(nlpai-lab/KoE5)로 구축.
 # ------------------------------------------------------------
 embedding:
-  active_model: multilingual-e5-large
+  active_model: multilingual-e5-large   # 레거시 참조값 — 실제 운용 임베딩은 KoE5
 
   models:
     multilingual-e5-large:
@@ -117,19 +119,23 @@ embedding:
 
 # ------------------------------------------------------------
 # 벡터 스토어
+# active_backend: chroma (ChromaDB + KoE5, 현재 운용 중)
+# 실제 경로는 runtime.yaml data.vector_store_dir 우선 사용
 # ------------------------------------------------------------
 vector_store:
-  active_backend: faiss
+  active_backend: chroma
 
   backends:
-    faiss:
-      index_type: FlatIP
-      index_dir: ./data/vector_index/faiss
-      index_name_template: "{embedding_model}_{chunking_strategy}"
-
     chroma:
-      persist_dir: ./data/vector_index/chroma
-      collection_name_template: "audit_{embedding_model}_{chunking_strategy}"
+      persist_dir: ./data/vectorstore/chroma
+      collection_name: samsung_audit
+      embedding_model: nlpai-lab/KoE5   # KoE5 (한국어 특화, 1024dim)
+      distance_function: cosine
+
+    faiss:                               # 레거시 — 현재 미사용
+      index_type: FlatIP
+      index_dir: ./data/legacy/vector_index/faiss
+      index_name_template: "{embedding_model}_{chunking_strategy}"
 
   search:
     top_k: 10
