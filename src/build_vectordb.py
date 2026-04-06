@@ -1,16 +1,10 @@
 """
-02_build_vectordb.py
-─────────────────────
 SQLite chunks → KoE5 임베딩 → ChromaDB 벡터 저장소
 
 모델 선택 근거:
   - KoE5 (nlpai-lab/KoE5): 한국어 특화 E5 계열, Recall@1 최고 성능
     → "정답을 정확하게 1위로 찾는 능력"이 핵심인 RAG QA에 최적
   - 대안: KURE-v1 (Recall@3/5 우수, 후보 다수 활용 시)
-
-실행:
-  python scripts/02_build_vectordb.py
-  python scripts/02_build_vectordb.py --batch-size 64 --model nlpai-lab/KoE5
 """
 
 import argparse
@@ -26,7 +20,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 # ── 경로 설정 ────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "db" / "audit_reports.db"
 VECTOR_DIR = ROOT / "db" / "vectorstore" / "chroma"
 
@@ -47,12 +41,7 @@ class KoE5Embedder:
     - 검색 시: query: <text>
     """
     def __init__(self, model_name: str = DEFAULT_MODEL):
-        if torch.cuda.is_available():
-            device = "cuda"
-        elif torch.backends.mps.is_available():
-            device = "mps"
-        else:
-            device = "cpu"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"  디바이스: {device}")
         self.model = SentenceTransformer(model_name, device=device)
         self.model_name = model_name
