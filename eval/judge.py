@@ -1,7 +1,8 @@
 """
 judge.py - LLM-as-a-Judge 평가 모듈
 
-현재 설정된 LLM(agents.yaml 고정)으로 답변 품질을 평가.
+채점 모델은 JUDGE_MODEL 상수로 고정.
+생성 모델(runs.yaml)이 바뀌어도 채점 기준이 일정하게 유지된다.
 
 채점 기준 (각 1~5점):
   - relevance:    질문에 적절히 답하는가
@@ -10,6 +11,12 @@ judge.py - LLM-as-a-Judge 평가 모듈
   - specificity:  구체적 수치·출처·연도를 인용하는가
   - coherence:    논리적으로 잘 정리되어 있는가
 """
+
+# ──────────────────────────────────────────────────────────────
+# 채점 모델 고정: 여러 생성 모델을 비교할 때 공정한 기준을 위해
+# 이 값은 run_eval.py의 runs.yaml과 무관하게 항상 동일하게 유지.
+# ──────────────────────────────────────────────────────────────
+JUDGE_MODEL = "fredrezones55/qwen3.5-opus:9b-tooling"
 
 import json
 import re
@@ -85,21 +92,20 @@ class LLMJudge:
         self._total_time = 0.0
 
     def _create_judge_llm(self) -> ChatOllama:
-        """Judge용 LLM (analyst 설정 재사용)"""
-        agent_cfg = self.config.agents.get("workflow", {})
+        """
+        채점용 LLM 생성.
+        모델은 JUDGE_MODEL 상수로 고정 — config/agents.yaml과 무관.
+        생성 모델을 바꿔 실험해도 채점 기준이 달라지지 않는다.
+        """
         runtime_cfg = self.config.runtime
-
-        # analyst 모델 사용 (가장 큰 모델)
-        model = agent_cfg.get("analyst", {}).get("model") or \
-                runtime_cfg.get("llm", {}).get("default_model", "qwen3.5:9b")
         backend = runtime_cfg.get("llm", {}).get("default_backend", "http://localhost:11434")
         timeout = runtime_cfg.get("llm", {}).get("timeout", 300)
 
-        print(f"[Judge] LLM: model={model}, backend={backend}")
+        print(f"[Judge] LLM: model={JUDGE_MODEL} (고정), backend={backend}")
 
         return ChatOllama(
             base_url=backend,
-            model=model,
+            model=JUDGE_MODEL,
             num_ctx=8192,
             num_predict=512,
             temperature=0.0,
