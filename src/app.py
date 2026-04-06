@@ -11,24 +11,35 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
-import json
 from pathlib import Path
 
 from src.config import load_config
 from src.db import AuditDB
-from src.agents.graph import build_graph, run_query, run_query_stream
+from src.agents.graph import build_graph, run_query_stream
 
 
 # ─── 초기화 ─────────────────────────────────────────────────
 
 @st.cache_resource
-def init_system():
-    """시스템 초기화 (한 번만 실행)"""
+def init_system(model_overrides: tuple = ()):
+    """
+    시스템 초기화 (한 번만 실행).
+    model_overrides: (("orchestrator", "model-name"), ...) 형태의 튜플.
+    값이 바뀌면 캐시가 버스트되어 그래프가 재빌드된다.
+    """
     config = load_config()
+
+    # 에이전트별 모델 오버라이드 적용
+    workflow = config.agents.setdefault("workflow", {})
+    for agent, model in model_overrides:
+        if agent in workflow and isinstance(workflow[agent], dict):
+            workflow[agent]["model"] = model
+
     db = AuditDB(config.db_path)
 
     # ChromaDB + KoE5 로드
     vectorstore = None
+    vector_error = None
     try:
         import chromadb
         from chromadb.config import Settings
@@ -45,11 +56,23 @@ def init_system():
         embedder = KoE5Embedder()
         vectorstore = (collection, embedder)
     except Exception as e:
-        st.warning(f"벡터 인덱스 로드 실패: {e}. BM25 검색만 사용합니다.")
+        vector_error = str(e)
         vectorstore = None
 
     graph = build_graph(config, db=db, vector_store=vectorstore)
-    return config, db, vectorstore, graph
+    return config, db, vectorstore, graph, vector_error
+
+
+def _get_db_stats(db: AuditDB) -> dict:
+    """DB 기본 통계 조회"""
+    try:
+        row = db.conn.execute("SELECT COUNT(*) as cnt FROM chunks").fetchone()
+        total = row["cnt"] if row else 0
+        sections = db.list_sections(level=1)
+        top_sections = sorted(set(s["section"] for s in sections))
+        return {"total_chunks": total, "sections": top_sections}
+    except Exception:
+        return {"total_chunks": 0, "sections": []}
 
 
 # ─── 노드 레이블 / 아이콘 ──────────────────────────────────
@@ -62,27 +85,113 @@ NODE_LABELS = {
 }
 
 
-def _node_detail(node: str, update: dict) -> str:
-    """노드별 진행 상세 문자열"""
+def _render_node_step(node: str, update: dict, retriever_count: int = 1):
+    """노드별 진행 상황을 Streamlit 위젯으로 렌더링"""
+    icon, label = NODE_LABELS.get(node, ("⚙️", node))
+
+    if node == "retriever" and retriever_count > 1:
+        icon, label = "🔄", f"추가 검색 #{retriever_count}"
+
     if node == "orchestrator":
         intent = update.get("intent", "")
         years = update.get("extracted_years", [])
-        return f"intent=**{intent}**, years={years}"
+        sections = update.get("extracted_sections", [])
+        sub_qs = update.get("sub_questions", [])
+
+        intent_label = {
+            "simple_lookup": "단순 조회",
+            "comparison": "비교 분석",
+            "trend": "추이 분석",
+            "calculation": "계산",
+            "general": "일반",
+        }.get(intent, intent)
+
+        st.markdown(f"{icon} **{label}** — 의도: `{intent_label}` | 연도: `{years}`")
+        if sections:
+            st.caption(f"   관련 섹션: {', '.join(sections)}")
+        if sub_qs:
+            with st.expander("분해된 서브 질문"):
+                for i, q in enumerate(sub_qs, 1):
+                    st.caption(f"{i}. {q}")
+
     elif node == "query_rewriter":
         queries = update.get("rewritten_queries", [])
-        sem = sum(1 for q in queries if q.get("type") == "semantic")
-        stru = sum(1 for q in queries if q.get("type") == "structured")
-        return f"총 {len(queries)}개 쿼리 (시맨틱 {sem}개 · 구조 {stru}개)"
+        sem = [q for q in queries if q.get("type") == "semantic"]
+        stru = [q for q in queries if q.get("type") == "structured"]
+        st.markdown(
+            f"{icon} **{label}** — 총 {len(queries)}개 쿼리 "
+            f"(시맨틱 {len(sem)}개 · 구조 {len(stru)}개)"
+        )
+        if queries:
+            with st.expander("생성된 쿼리 목록"):
+                for q in queries:
+                    tag = "🔵" if q.get("type") == "semantic" else "🟠"
+                    strategy = q.get("strategy", "")
+                    st.caption(f"{tag} [{strategy}] {q.get('query', '')}")
+                    if q.get("structured_params"):
+                        st.json(q["structured_params"])
+
     elif node == "retriever":
-        n = len(update.get("search_results", []))
-        csv = len(update.get("csv_data", {}))
-        return f"검색 결과 **{n}**개 · CSV **{csv}**개"
+        results = update.get("search_results", [])
+        csv_count = len(update.get("csv_data", {}))
+        st.markdown(
+            f"{icon} **{label}** — 검색 결과 **{len(results)}**개 · CSV **{csv_count}**개"
+        )
+        if results:
+            with st.expander("검색된 소스 (상위 5개)"):
+                seen = []
+                for r in results[:5]:
+                    yr = r.get("year", "?")
+                    sec = r.get("section_path", "?")
+                    score = r.get("score", 0)
+                    stype = r.get("search_type", "")
+                    entry = f"📄 {yr}년 | {sec} | score={score:.3f} | {stype}"
+                    if entry not in seen:
+                        st.caption(entry)
+                        seen.append(entry)
+
     elif node == "analyst":
         answer = update.get("answer", "")
         needs = update.get("needs_more_search", False)
-        status = "추가 검색 필요" if needs else "완료"
-        return f"답변 {len(answer)}자 · {status}"
-    return ""
+        calcs = update.get("calculations", [])
+        sources = update.get("sources", [])
+        status_icon = "⏳ 추가 검색 필요" if needs else "✅ 완료"
+        st.markdown(
+            f"{icon} **{label}** — 답변 {len(answer)}자 | "
+            f"출처 {len(sources)}개 | 계산 {len(calcs)}개 | {status_icon}"
+        )
+
+    else:
+        st.markdown(f"{icon} **{label}**")
+
+
+# ─── 대화 히스토리 → 쿼리 컨텍스트 ─────────────────────────
+
+def _build_query_with_history(prompt: str, messages: list, max_turns: int = 3) -> str:
+    """
+    최근 N턴 대화를 현재 질문 앞에 컨텍스트로 추가.
+    멀티턴 구현: app.py에서만 수정, 다른 에이전트 파일 변경 불필요.
+    """
+    # 현재 방금 추가된 user 메시지 제외한 이전 대화
+    prior = [m for m in messages if m.get("role") in ("user", "assistant")]
+    # 방금 추가한 현재 user 메시지(마지막)는 prompt로 받으므로 제외
+    if prior and prior[-1]["role"] == "user" and prior[-1]["content"] == prompt:
+        prior = prior[:-1]
+
+    if not prior:
+        return prompt
+
+    # 최근 max_turns 턴(user+assistant 쌍)
+    recent = prior[-(max_turns * 2):]
+    history_lines = []
+    for m in recent:
+        role = "사용자" if m["role"] == "user" else "어시스턴트"
+        # 어시스턴트 답변은 앞 200자만 (토큰 절약)
+        content = m["content"][:200] + "..." if m["role"] == "assistant" and len(m["content"]) > 200 else m["content"]
+        history_lines.append(f"{role}: {content}")
+
+    history_str = "\n".join(history_lines)
+    return f"[이전 대화 참고]\n{history_str}\n\n[현재 질문]\n{prompt}"
 
 
 # ─── 페이지 설정 ─────────────────────────────────────────────
@@ -99,37 +208,118 @@ def main():
 
     st.title(f"📊 {ui_config.get('title', '감사보고서 QA 시스템')}")
 
-    # 사이드바
+    # 모델 오버라이드 세션 초기화
+    if "model_overrides" not in st.session_state:
+        st.session_state.model_overrides = {}
+
+    # 시스템 초기화 (model_overrides가 캐시 키 역할)
+    overrides_tuple = tuple(sorted(st.session_state.model_overrides.items()))
+    try:
+        cfg, db, vectorstore, graph, vector_error = init_system(overrides_tuple)
+    except Exception as e:
+        st.error(f"시스템 초기화 실패: {e}")
+        st.stop()
+
+    # ─── 사이드바 ─────────────────────────────────────────────
     with st.sidebar:
         st.header("설정")
 
-        years = config.years
+        # 연도 필터 (실제 DB 데이터 기반)
+        years = cfg.years
         selected_years = st.multiselect(
             "연도 필터",
             options=years,
             default=[],
-            help="비워두면 전체 연도 검색",
+            help="비워두면 전체 연도 검색. 선택 시 질문에 연도 힌트로 반영됩니다.",
         )
 
-        sections = ["전체", "독립된 감사인의 감사보고서", "재무제표", "주석",
-                    "내부회계관리제도 감사보고서", "외부감사 실시내용"]
-        selected_section = st.selectbox("섹션 필터", sections)
+        # 섹션 필터 (실제 DB에서 조회)
+        db_stats = _get_db_stats(db)
+        real_sections = ["전체"] + db_stats["sections"]
+        selected_section = st.selectbox(
+            "섹션 필터",
+            real_sections,
+            help="선택 시 질문에 섹션 힌트로 반영됩니다.",
+        )
 
         st.divider()
 
-        st.caption("시스템 정보")
-        st.caption(f"임베딩: {config.active_embedding}")
-        st.caption(f"청킹: {config.active_chunking}")
-        st.caption(f"LLM: {config.runtime.get('llm', {}).get('default_model', '?')}")
+        # ─── 모델 설정 ──────────────────────────────────────
+        st.caption("**모델 설정**")
 
+        # 선택 가능한 모델 목록: runtime.yaml + 현재 에이전트 모델
+        available_in_yaml = list(
+            config.runtime.get("llm", {}).get("available_models", {}).keys()
+        )
+        workflow = cfg.agents.get("workflow", {})
+        current_agent_models = [
+            info.get("model", "")
+            for info in workflow.values()
+            if isinstance(info, dict) and info.get("model")
+        ]
+        # 중복 없이 현재 사용 모델을 맨 앞에
+        all_models: list[str] = []
+        for m in current_agent_models + available_in_yaml:
+            if m and m not in all_models:
+                all_models.append(m)
+
+        AGENT_LABELS = {
+            "orchestrator":   "Orchestrator  (의도 분석)",
+            "query_rewriter": "Query Rewriter (쿼리 최적화)",
+            "retriever":      "Retriever      (문서 검색) ★",
+            "analyst":        "Analyst        (답변 생성) ★",
+        }
+
+        with st.expander("에이전트별 모델 변경", expanded=False):
+            pending: dict[str, str] = {}
+            for agent, label in AGENT_LABELS.items():
+                current = (
+                    st.session_state.model_overrides.get(agent)
+                    or workflow.get(agent, {}).get("model", all_models[0] if all_models else "")
+                )
+                idx = all_models.index(current) if current in all_models else 0
+                selected = st.selectbox(label, all_models, index=idx, key=f"model_sel_{agent}")
+                pending[agent] = selected
+
+            if st.button("모델 적용 (그래프 재초기화)", use_container_width=True, type="primary"):
+                st.session_state.model_overrides = pending
+                init_system.clear()
+                st.rerun()
+
+        # 현재 적용된 모델 요약
+        active_models = {
+            agent: st.session_state.model_overrides.get(agent) or workflow.get(agent, {}).get("model", "?")
+            for agent in AGENT_LABELS
+        }
+        unique_active = set(active_models.values())
+        if len(unique_active) == 1:
+            st.caption(f"LLM: `{next(iter(unique_active))}`")
+        else:
+            for agent, model in active_models.items():
+                st.caption(f"`{agent}`: {model}")
+
+        # 벡터 스토어 상태
+        if vectorstore is not None:
+            coll, _ = vectorstore
+            vec_count = coll.count()
+            st.caption(f"벡터 DB: ✅ {vec_count:,}개 벡터 (KoE5)")
+        else:
+            st.caption(f"벡터 DB: ⚠️ 비활성 (BM25만 사용)")
+            if vector_error:
+                with st.expander("오류 상세"):
+                    st.caption(vector_error)
+
+        # DB 통계
+        st.caption(f"청크 수: {db_stats['total_chunks']:,}개")
+        st.caption(f"대상 연도: {cfg.years[0]}~{cfg.years[-1]}") if cfg.years else None
+
+        st.divider()
         show_debug = st.toggle("디버그 정보 표시", value=False)
 
-    # 시스템 초기화
-    try:
-        cfg, db, vectorstore, graph = init_system()
-    except Exception as e:
-        st.error(f"시스템 초기화 실패: {e}")
-        st.stop()
+        # 대화 초기화
+        if st.button("대화 초기화", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
 
     # ─── 채팅 ────────────────────────────────────────────────
 
@@ -150,15 +340,30 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # 응답 생성
+        # ─── 필터 힌트 + 멀티턴 컨텍스트 조합 ──────────────
+        effective_query = prompt
+
+        # 사이드바 필터를 질문 앞에 힌트로 추가
+        filter_hints = []
+        if selected_years:
+            filter_hints.append(f"연도 필터: {selected_years}")
+        if selected_section and selected_section != "전체":
+            filter_hints.append(f"섹션 필터: {selected_section}")
+        if filter_hints:
+            effective_query = "[검색 조건]\n" + "\n".join(filter_hints) + "\n\n" + effective_query
+
+        # 멀티턴: 이전 대화 컨텍스트 prepend
+        effective_query = _build_query_with_history(
+            effective_query, st.session_state.messages
+        )
+
+        # ─── 응답 생성 ────────────────────────────────────────
         with st.chat_message("assistant"):
-            # ─── 진행 과정 표시 (st.status) ──────────────────
-            progress_log = []   # 완료된 스텝 기록
             result_state = {}
             retriever_count = 0
 
             with st.status("분석 중...", expanded=True) as status:
-                for event in run_query_stream(graph, prompt):
+                for event in run_query_stream(graph, effective_query):
                     node = event["node"]
                     update = event["update"]
                     state = event["state"]
@@ -168,19 +373,11 @@ def main():
                         break
 
                     icon, label = NODE_LABELS.get(node, ("⚙️", node))
-                    detail = _node_detail(node, update)
 
-                    # 반복 retriever 구분
                     if node == "retriever":
                         retriever_count += 1
-                        if retriever_count > 1:
-                            icon, label = "🔄", f"추가 검색 #{retriever_count}"
 
-                    step_text = f"{icon} **{label}** — {detail}" if detail else f"{icon} **{label}**"
-                    st.markdown(step_text)
-                    progress_log.append(step_text)
-
-                    # 상태바 업데이트
+                    _render_node_step(node, update, retriever_count)
                     status.update(label=f"{icon} {label} 진행 중...")
 
                 status.update(label="✅ 분석 완료", state="complete")
@@ -211,7 +408,7 @@ def main():
                             f"({calc.get('expression', '')})"
                         )
 
-            # 쿼리 재작성 결과 (디버그)
+            # 쿼리 재작성 (디버그)
             rewritten = result_state.get("rewritten_queries", [])
             if show_debug and rewritten:
                 with st.expander("✏️ 재작성된 검색 쿼리"):
@@ -228,6 +425,7 @@ def main():
                 "errors": result_state.get("errors", []),
                 "sources_count": len(sources),
                 "rewritten_queries": rewritten,
+                "effective_query": effective_query,
             }
 
             if show_debug:
