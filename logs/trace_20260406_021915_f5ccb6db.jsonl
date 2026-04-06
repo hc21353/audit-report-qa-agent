@@ -1,0 +1,6 @@
+{"ts": "2026-04-06T02:19:11.898903", "run_id": "f5ccb6db", "node": "orchestrator", "event": "node_start", "input": {"user_query": "2024년 삼성 총자산", "intent": "", "extracted_years": [], "iteration": 0}}
+{"ts": "2026-04-06T02:19:11.899494", "run_id": "f5ccb6db", "node": "orchestrator", "event": "node_end", "output_summary": {"intent": "simple_lookup", "extracted_years": [2024], "extracted_sections": ["재무제표"], "sub_questions": []}, "elapsed_s": 0.0}
+{"ts": "2026-04-06T02:19:11.900645", "run_id": "f5ccb6db", "node": "retriever", "event": "node_start", "input": {"user_query": "2024년 삼성 총자산", "intent": "simple_lookup", "extracted_years": [2024], "iteration": 0}}
+{"ts": "2026-04-06T02:19:15.373135", "run_id": "f5ccb6db", "node": "retriever", "event": "node_end", "output_summary": {"search_results_count": 5}, "elapsed_s": 3.47}
+{"ts": "2026-04-06T02:19:15.375622", "run_id": "f5ccb6db", "node": "analyst", "event": "node_start", "input": {"user_query": "2024년 삼성 총자산", "intent": "simple_lookup", "extracted_years": [2024], "iteration": 0}}
+{"ts": "2026-04-06T02:19:15.378446", "run_id": "f5ccb6db", "node": "analyst", "event": "node_end", "output_summary": {"answer": "답변 생성 중 오류: [Errno 61] Connection refused", "needs_more_search": false, "iteration": 1, "errors": ["Analyst LLM error: [Errno 61] Connection refused"]}, "elapsed_s": 0.0}

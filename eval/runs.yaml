@@ -1,0 +1,28 @@
+# ============================================================
+# runs.yaml - 평가 실험 설정
+#
+# 현재 벡터 스토어: ChromaDB + KoE5 (nlpai-lab/KoE5) 고정
+# LLM 모델: agents.yaml에서 설정
+#
+# 사용법:
+#   python eval/run_eval.py                        # 전체 실험
+#   python eval/run_eval.py --run koe5_chroma      # 단일 실험
+#   python eval/run_eval.py --questions q01,q05    # 특정 질문만
+#   python eval/run_eval.py --skip-judge           # Judge 없이 답변만
+# ============================================================
+
+output_dir: ./experiments
+
+runs:
+  # ── 현재 기본 설정 ────────────────────────────────────────
+
+  - name: koe5_chroma
+    description: "현재 설정: ChromaDB + KoE5 (nlpai-lab/KoE5, cosine, 1024dim)"
+    vector_store: chroma
+
+  # ── 추후 비교 실험 추가 예시 ──────────────────────────────
+  # 새 임베딩 모델로 build_vectordb.py 재실행 후 아래처럼 추가:
+  #
+  # - name: kure_v1_chroma
+  #   description: "비교: ChromaDB + KURE-v1 (Recall@3 최적화)"
+  #   vector_store: chroma

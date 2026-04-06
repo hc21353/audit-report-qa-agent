@@ -1,0 +1,221 @@
+questions:
+
+  - id: q01
+    question: "2024년 삼성전자의 총자산은 얼마인가?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: "324,966,127백만원"
+    expected_answer: "324,966,127백만원"
+
+  - id: q02
+    question: "2024년 핵심감사사항은 무엇인가?"
+    type: section_lookup
+    expected_year: 2024
+    expected_section: "독립된 감사인의 감사보고서"
+    ground_truth: "건설중인자산 감가상각개시시점;매출차감"
+    expected_answer: "건설중인자산 감가상각개시시점;매출차감"
+
+  - id: q03
+    question: "2024년 감사의견은?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: "적정"
+    expected_answer: "적정"
+
+  - id: q04
+    question: "2022년 감사의견은?"
+    type: simple_lookup
+    expected_year: 2022
+    ground_truth: "적정"
+    expected_answer: "적정"
+
+  - id: q05
+    question: "2024년 삼성전자의 영업이익은 얼마인가?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: "12,361,034백만원"
+    expected_answer: "12,361,034백만원"
+
+  - id: q06
+    question: "2023년 삼성전자의 당기순이익은?"
+    type: simple_lookup
+    expected_year: 2023
+    ground_truth: "25,397,099백만원"
+    expected_answer: "25,397,099백만원"
+
+  - id: q07
+    question: "2024년 유동자산 총액은?"
+    type: simple_lookup
+    expected_year: 2024
+    ground_truth: "82,320,322백만원"
+    expected_answer: "82,320,322백만원"
+
+  - id: q08
+    question: "2023년 주석 3에서 중요한 회계추정 및 가정을 설명해줘"
+    type: section_lookup
+    expected_year: 2023
+    expected_section: "주석 > 3. 중요한 회계추정 및 가정"
+    ground_truth: "수익인식;판매보증충당부채;금융상품공정가치;손상;리스;퇴직급여;영업권손상;법인세"
+    expected_answer: "수익인식;판매보증충당부채;금융상품공정가치;손상;리스;퇴직급여;영업권손상;법인세"
+
+  - id: q09
+    question: "2024년 감사보고서의 감사범위는 어떻게 되나요?"
+    type: section_lookup
+    expected_year: 2024
+    expected_section: "독립된 감사인의 감사보고서"
+    ground_truth: "재무상태표;손익계산서;포괄손익;자본변동;현금흐름;주석"
+    expected_answer: "재무상태표;손익계산서;포괄손익;자본변동;현금흐름;주석"
+
+  - id: q10
+    question: "2021년 주요 회계추정 가정 중 판매보증충당부채 내용을 알려줘"
+    type: section_lookup
+    expected_year: 2021
+    ground_truth: "과거경험기반 추정"
+    expected_answer: "과거경험기반 추정"
+
+  - id: q11
+    question: "2018년 대비 2022년 부채 구조가 어떻게 변했는가?"
+    type: year_comparison
+    expected_years: [2018, 2022]
+    ground_truth: "총부채 증가;유동부채 증가;비유동부채 증가"
+    expected_answer: "총부채 증가;유동부채 증가;비유동부채 증가"
+
+  - id: q12
+    question: "2020년과 2024년의 유동자산 구성 차이를 설명해줘"
+    type: year_comparison
+    expected_years: [2020, 2024]
+    ground_truth: "유동자산 증가;재고자산 증가"
+    expected_answer: "유동자산 증가;재고자산 증가"
+
+  - id: q13
+    question: "2019년과 2023년의 핵심감사사항을 비교해줘"
+    type: year_comparison
+    expected_years: [2019, 2023]
+    ground_truth: "매출차감 유지;감가상각→재고평가"
+    expected_answer: "매출차감 유지;감가상각→재고평가"
+
+  - id: q14
+    question: "2021년과 2024년 총자산 및 자기자본 변화를 비교 분석해줘"
+    type: year_comparison
+    expected_years: [2021, 2024]
+    ground_truth: "총자산 증가;자본 증가"
+    expected_answer: "총자산 증가;자본 증가"
+
+  - id: q15
+    question: "2022년과 2023년의 영업이익 차이와 그 배경을 설명해줘"
+    type: year_comparison
+    expected_years: [2022, 2023]
+    ground_truth: "흑자→적자;재고평가 영향"
+    expected_answer: "흑자→적자;재고평가 영향"
+
+  - id: q16
+    question: "최근 5년간 유동자산 추이를 설명해줘"
+    type: trend_analysis
+    expected_years: [2020, 2021, 2022, 2023, 2024]
+    ground_truth: "감소 후 증가"
+    expected_answer: "감소 후 증가"
+
+  - id: q17
+    question: "감사의견이 변경된 연도가 있는가? 전체 연도 기준으로 알려줘"
+    type: trend_analysis
+    expected_years: "all"
+    ground_truth: "변경없음"
+    expected_answer: "변경없음"
+
+  - id: q18
+    question: "2015년부터 2024년까지 총자산 변화 추이를 요약해줘"
+    type: trend_analysis
+    expected_years: "2015-2024"
+    ground_truth: "전반적 증가"
+    expected_answer: "전반적 증가"
+
+  - id: q19
+    question: "최근 3년간 핵심감사사항의 주요 변화가 있었는지 설명해줘"
+    type: trend_analysis
+    expected_years: [2022, 2023, 2024]
+    ground_truth: "매출차감 유지;재고→감가상각 변경"
+    expected_answer: "매출차감 유지;재고→감가상각 변경"
+
+  - id: q20
+    question: "2019년부터 2024년까지 부채비율은 어떻게 변화했는가?"
+    type: trend_analysis
+    expected_years: [2019, 2020, 2021, 2022, 2023, 2024]
+    ground_truth: "상승"
+    expected_answer: "상승"
+
+  - id: q21
+    question: "2024년 유동비율과 부채비율을 계산해줘"
+    type: calculation
+    expected_year: 2024
+    expected_tools: [calculator]
+    ground_truth: "102.70%;37.47%"
+    expected_answer: "102.70%;37.47%"
+
+  - id: q22
+    question: "최근 3년 ROA 추이를 보여줘"
+    type: calculation
+    expected_years: [2022, 2023, 2024]
+    expected_tools: [calculator]
+    ground_truth: "9.94%;9.12%;7.58%"
+    expected_answer: "9.94%;9.12%;7.58%"
+
+  - id: q23
+    question: "2024년 자기자본이익률(ROE)을 계산하고 이전 연도와 비교해줘"
+    type: calculation
+    expected_years: [2023, 2024]
+    expected_tools: [calculator]
+    ground_truth: "11.70%→10.23%"
+    expected_answer: "11.70%→10.23%"
+
+  - id: q24
+    question: "2022년, 2023년, 2024년의 영업이익률을 각각 계산해줘"
+    type: calculation
+    expected_years: [2022, 2023, 2024]
+    expected_tools: [calculator]
+    ground_truth: "11.95%;-6.77%;5.91%"
+    expected_answer: "11.95%;-6.77%;5.91%"
+
+  - id: q25
+    question: "최근 3년 부채비율 추이를 차트로 보여줘"
+    type: multi_hop
+    expected_years: [2022, 2023, 2024]
+    expected_tools: [calculator, chart_generator]
+    ground_truth: "24.19%;32.06%;37.47%"
+    expected_answer: "24.19%;32.06%;37.47%"
+
+  - id: q26
+    question: "2024년 핵심감사사항으로 선정된 항목들이 재무제표의 어떤 항목과 관련이 있는지 설명해줘"
+    type: multi_hop
+    expected_year: 2024
+    expected_sections: ["독립된 감사인의 감사보고서", "재무제표"]
+    ground_truth: "유형자산;매출"
+    expected_answer: "유형자산;매출"
+
+  - id: q27
+    question: "삼성전자의 수익인식 기준은 어떻게 되며, 이것이 영업이익에 미치는 영향은?"
+    type: multi_hop
+    expected_section: "주석"
+    ground_truth: "통제이전;매출차감;반품추정"
+    expected_answer: "통제이전;매출차감;반품추정"
+
+  - id: q28
+    question: "2023년과 2024년 재고자산 금액을 비교하고, 재고자산 평가 기준도 함께 설명해줘"
+    type: multi_hop
+    expected_years: [2023, 2024]
+    expected_sections: ["재무제표", "주석"]
+    ground_truth: "29,338,151백만원;29,154,115백만원;원가/NRV"
+    expected_answer: "29,338,151백만원;29,154,115백만원;원가/NRV"
+
+  - id: q29
+    question: "삼성전자 감사보고서에서 내부회계관리제도 감사보고서는 어떤 내용을 담고 있나?"
+    type: general_explain
+    expected_section: "내부회계관리제도 감사보고서"
+    ground_truth: "내부통제 효과성"
+    expected_answer: "내부통제 효과성"
+
+  - id: q30
+    question: "외부감사 실시내용에서 감사팀의 구성과 감사 절차는 어떻게 설명되어 있나?"
+    type: general_explain
+    expected_section: "외부감사 실시내용"
+    ground_truth: "위험평가;표본검사;내부통제검토"
+    expected_answer: "위험평가;표본검사;내부통제검토"

@@ -1,0 +1,6 @@
+{"ts": "2026-04-02T09:58:50.706506", "run_id": "e5293271", "node": "orchestrator", "event": "node_start", "input": {"user_query": "2023년 주석 3 설명해줘", "intent": "", "extracted_years": [], "iteration": 0}}
+{"ts": "2026-04-02T09:58:50.706773", "run_id": "e5293271", "node": "orchestrator", "event": "node_end", "output_summary": {"intent": "simple_lookup", "extracted_years": [2023], "extracted_sections": ["주석"], "sub_questions": []}, "elapsed_s": 0.0}
+{"ts": "2026-04-02T09:58:50.707026", "run_id": "e5293271", "node": "retriever", "event": "node_start", "input": {"user_query": "2023년 주석 3 설명해줘", "intent": "simple_lookup", "extracted_years": [2023], "iteration": 0}}
+{"ts": "2026-04-02T09:59:24.579433", "run_id": "e5293271", "node": "retriever", "event": "node_end", "output_summary": {"search_results_count": 20}, "elapsed_s": 33.87}
+{"ts": "2026-04-02T09:59:24.579673", "run_id": "e5293271", "node": "analyst", "event": "node_start", "input": {"user_query": "2023년 주석 3 설명해줘", "intent": "simple_lookup", "extracted_years": [2023], "iteration": 0}}
+{"ts": "2026-04-02T10:00:25.509950", "run_id": "e5293271", "node": "analyst", "event": "node_end", "output_summary": {"answer": "제공된 검색 결과에는 **2023 년 주석 3**에 대한 구체적인", "sources": "[list:20 items]", "calculations": [], "needs_more_search": false, "additional_query": "", "iteration": 1}, "elapsed_s": 60.93}
