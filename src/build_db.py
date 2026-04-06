@@ -1,5 +1,5 @@
 """
-01_build_sqlite.py
+일반 디비 구축 스크립트 (SQLite)
 ──────────────────
 semantic_chunks_tagged.json (JSONL) → SQLite audit_reports.db
 
@@ -8,10 +8,6 @@ semantic_chunks_tagged.json (JSONL) → SQLite audit_reports.db
   - tags        : 청크-태그 매핑 (다대다 정규화)
   - metadata    : 연도별 감사보고서 메타 (auditor, opinion 등)
   - fts_chunks  : FTS5 전문 검색 인덱스
-
-실행:
-  python scripts/01_build_sqlite.py
-  python scripts/01_build_sqlite.py --chunks parsed_data/chunks/semantic_chunks_tagged.json
 """
 
 import argparse
@@ -21,10 +17,9 @@ from datetime import datetime
 from pathlib import Path
 
 # ── 경로 설정 ────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent         # project root
+ROOT = Path(__file__).resolve().parent.parent  # src/ → 프로젝트 루트
 CHUNKS_PATH = ROOT / "parsed_data" / "chunks" / "semantic_chunks_tagged.jsonl"
 DB_PATH = ROOT / "db" / "audit_reports.db"
-
 
 # ── 스키마 ────────────────────────────────────────────────────────────────────
 SCHEMA_SQL = """
