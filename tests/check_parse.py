@@ -1,5 +1,5 @@
 """
-parse_final.py 의 핵심 함수(파싱/분류/변환 로직)들에 대한 단위 테스트 모음.
+pytest 기반 parse_final.py 의 핵심 함수(파싱/분류/변환 로직)들에 대한 단위 테스트 모음.
 파일 IO나 외부 의존성이 있는 함수들은 의도적으로 제외, 순수 함수들에 집중하여 테스트 구성.
 
 테스트 구성:
@@ -31,7 +31,7 @@ import pandas as pd
 import pytest
 from bs4 import BeautifulSoup
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "parsed_data"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import parse_final as P  # noqa: E402
 

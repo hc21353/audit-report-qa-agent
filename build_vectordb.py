@@ -20,7 +20,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 # ── 경로 설정 ────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent  # 루트에 있으니까 .parent 한 번만
 DB_PATH = ROOT / "db" / "audit_reports.db"
 VECTOR_DIR = ROOT / "db" / "vectorstore" / "chroma"
 
