@@ -1,16 +1,10 @@
 """
-02_build_vectordb.py
-─────────────────────
 SQLite chunks → KoE5 임베딩 → ChromaDB 벡터 저장소
 
 모델 선택 근거:
   - KoE5 (nlpai-lab/KoE5): 한국어 특화 E5 계열, Recall@1 최고 성능
     → "정답을 정확하게 1위로 찾는 능력"이 핵심인 RAG QA에 최적
   - 대안: KURE-v1 (Recall@3/5 우수, 후보 다수 활용 시)
-
-실행:
-  python scripts/02_build_vectordb.py
-  python scripts/02_build_vectordb.py --batch-size 64 --model nlpai-lab/KoE5
 """
 
 import argparse
